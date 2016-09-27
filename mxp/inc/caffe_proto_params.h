@@ -45,6 +45,7 @@ typedef struct {
 	POOL_TYPE_E poolType;
 	int nOutputs;
 	int stride;
+	int pad;
 	CNN_LAYER_TYPE_E lyrType;
 } CAFFE_LYR_PARAM_T;
 

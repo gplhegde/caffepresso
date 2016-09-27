@@ -1,6 +1,7 @@
 #include "sim_image.h"
 #include "debug_control.h"
 
+#if 0
 void write_image(const char *name, char *imgData, int nRows, int nCols) {
 	CvSize size;
 
@@ -45,3 +46,4 @@ uint8_t * read_gray_image(const char *fileName, int *H, int *W) {
 	memcpy(data, grayImg->imageData, (colorImg->height*colorImg->width*sizeof(uint8_t)));
 	return data;
 }
+#endif

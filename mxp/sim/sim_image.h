@@ -1,9 +1,8 @@
 #ifndef _SIM_IMAGE_H_
 #define _SIM_IMAGE_H_
-
-#include<opencv/highgui.h>
-#include<opencv/cxcore.h>
-#include<opencv/cv.h>
+//#include<opencv2/highgui/highgui_c.h>
+//#include<opencv2/core/core_c.h>
+//#include<opencv/cv.h>
 #include "struct_defs.h"
 /** \brief Write image to a file
 *
