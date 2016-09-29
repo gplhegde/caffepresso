@@ -1,0 +1,12 @@
+name: "relu-test"
+input:"data"
+input_dim: 1
+input_dim: 1
+input_dim: 32
+input_dim: 32
+layer {
+  name: "relu1"
+  type: "ReLU"
+  bottom: "data"
+  top: "relu1"
+}

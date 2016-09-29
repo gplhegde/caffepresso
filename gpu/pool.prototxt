@@ -1,0 +1,17 @@
+name: "pool-example"
+input: "data"
+input_dim: 1
+input_dim: 1
+input_dim: 32
+input_dim: 32
+layer {
+  name: "pool1"
+  type: "Pooling"
+  bottom: "data"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 2
+    stride: 2
+  }
+}
