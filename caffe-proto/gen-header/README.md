@@ -1,0 +1,1 @@
+These are scripts to generate C source files from the prototxt network specifications.
