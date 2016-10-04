@@ -3,7 +3,7 @@
 1. We assume the CUDA and cuDNN libraries are installed. You will also need to install Caffe. Make sure that it is compiled with cuDNN=1 flag
 
 2. To run tests execute the following command
-```./run-cases-benchmarks.sh <caffe_installation_path>```
+```./run-cases-benchmarks.sh```
 
 3. The script will loop through the different prototxt specifications and generate timing results. These result logs will be stored in this directory itself.
 
