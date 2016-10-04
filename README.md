@@ -4,12 +4,7 @@ This git repository supports the CASES 2016 paper "Cafftimized ePresso: An Optim
 
 ### How do I get set up? ###
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+**Hardware** -- TI Keystone II DSP (66AK2H12), Adapteva Parallella/Epiphany-III SoC board, NVIDIA Jetson TX1 GPU, Xilinx ZC706 FPGA. Also need USB cables and SD cards as required.
 
 ### Contribution guidelines ###
 
