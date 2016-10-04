@@ -1,10 +1,17 @@
 # CaffePresso #
 
-This git repository supports the CASES 2016 paper "CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms". It contains ConvNet implementations for DSP, FPGA, and NoC-based embedded accelerators. The framework is modularized so support for new hardware platforms is simple. It is also possible to change the ConvNet specifications and regenerate the implementations.
+This git repository supports the CASES 2016 paper "CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms". It contains ConvNet implementations for DSP, FPGA, and NoC-based embedded accelerators. We provide a code generator that translates Caffe prototxt into low-level specifications for the various backends.
+
+The framework is modularized so support for new hardware platforms is simple. It is also possible to change the ConvNet specifications and regenerate the implementations.
 
 ### How do I get set up? ###
 
-**Hardware** -- TI Keystone II DSP (66AK2H12), Adapteva Parallella/Epiphany-III SoC board, NVIDIA Jetson TX1 GPU, Xilinx ZC706 FPGA. Also need USB cables and SD cards as required.
+**Hardware** (USD prices from May 2016)
+- TI Keystone II DSP (66AK2H12) -- $997
+- Adapteva Parallella/Epiphany-III SoC board -- $126
+- NVIDIA Jetson TX1 GPU platform -- $599
+- Xilinx ZC706 FPGA -- $2275
+- Also need USB cables and SD cards as required.
 
 **Software** -- TI Code Composer Studio, Epiphany SDK, CUDA + cuDNN libraries, Vectorblox bitstreams + Xilinx ISE, OS images for Parallella. You also need Caffe from caffe.berkeleyvision.org. Make sure to build it with CUDNN flags set to 1.
 
