@@ -7,13 +7,21 @@ The framework is modularized so support for new hardware platforms is simple. It
 ### How do I get set up? ###
 
 **Hardware** (USD prices from May 2016)
+
 - TI Keystone II DSP (66AK2H12) -- $997
 - Adapteva Parallella/Epiphany-III SoC board -- $126
 - NVIDIA Jetson TX1 GPU platform -- $599
 - Xilinx ZC706 FPGA -- $2275
 - Also need USB cables and SD cards as required.
 
-**Software** -- TI Code Composer Studio, Epiphany SDK, CUDA + cuDNN libraries, Vectorblox bitstreams + Xilinx ISE, OS images for Parallella. You also need Caffe from caffe.berkeleyvision.org. Make sure to build it with CUDNN flags set to 1.
+**Software**
+
+- TI Code Composer Studio v6, IMGLIB and DSPLIB
+- Epiphany SDK (https://github.com/adapteva/epiphany-sdk)
+- CUDA + cuDNNv5 libraries
+- Vectorblox bitstreams + Xilinx Vivado (https://github.com/VectorBlox/mxp/tree/master/examples/boards/zc706_arm_viv)
+- OS images for Parallella (https://www.parallella.org/create-sdcard/)
+- Caffe from caffe.berkeleyvision.org. Make sure to build it with CUDNN flags set to 1.
 
 ### Building and running code ###
 
