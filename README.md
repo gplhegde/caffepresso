@@ -4,7 +4,7 @@ This git repository supports the CASES 2016 paper **"CaffePresso: An Optimized L
 
 The framework is modularized so support for new hardware platforms is simple. It is also possible to change the ConvNet specifications and regenerate the implementations.
 
-### How do I get set up? ###
+### What are the pre-requisites to use this repo? ###
 
 **Hardware** (USD prices from May 2016)
 
