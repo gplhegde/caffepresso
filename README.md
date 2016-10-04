@@ -1,11 +1,6 @@
 # CaffePresso #
 
-This git repository supports the CASES 2016 paper "
-### What is this repository for? ###
-
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+This git repository supports the CASES 2016 paper "Cafftimized ePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms". It contains ConvNet implementations for DSP, FPGA, and NoC-based embedded accelerators. The framework is modularized so support for new hardware platforms is simple. It is also possible to change the ConvNet specifications and regenerate the implementations.
 
 ### How do I get set up? ###
 
