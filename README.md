@@ -41,7 +41,7 @@ If you use this tool in your work and find it useful, please cite:
 @article{caffepresso_cases2016,
   title={CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms},
   author={Hegde, Gopalakrishna and Siddhartha and Ramasamy, Nachiappan and Kapre, Nachiket},
- booktitle = {Proceedings of the 2016 International Conference on Compilers, Architecture and Synthesis for Embedded Systems},
+  booktitle = {Proceedings of the 2016 International Conference on Compilers, Architecture and Synthesis for Embedded Systems},
   year={2016}
 }
 ```
