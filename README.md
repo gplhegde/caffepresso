@@ -6,15 +6,21 @@ This git repository supports the CASES 2016 paper "Cafftimized ePresso: An Optim
 
 **Hardware** -- TI Keystone II DSP (66AK2H12), Adapteva Parallella/Epiphany-III SoC board, NVIDIA Jetson TX1 GPU, Xilinx ZC706 FPGA. Also need USB cables and SD cards as required.
 
-### Contribution guidelines ###
+**Software** -- TI Code Composer Studio, Epiphany SDK, CUDA + cuDNN libraries, Vectorblox bitstreams + Xilinx ISE, OS images for Parallella. You also need Caffe from caffe.berkeleyvision.org. Make sure to build it with CUDNN flags set to 1.
 
-* Writing tests
-* Code review
-* Other guidelines
+### Building and running code ###
+
+The ConvNet configurations used in the paper are stored in **nets** folder. The code-generation scripts are in **caffe-proto** folders. 
+
+**gpu** -- This contains the scripts to run various ConvNets via Caffe + cuDNN on the Jetson TX1. It is a seamless experience and it will get your started right away.
+
+**mxp** -- You can either do a simulation (via license from Vectorblox) or directly execute on the FPGA board with the dowloaded 64-lane ZC706 bitstream (freely available on Vectorblox github). The header and top-level files are assembled from the code generator block.
+
+**dsp** and **noc** -- These contain sub-folders for the various datasets. There is some manual assembly required to run this through the respective build systems. The Caffe code-generator frontend supplies the ConvNet-specific header configuration for execution.
 
 ### How to cite this paper? ###
 
-If you like this tool, please cite:
+If you use this tool in your work and find it useful, please cite:
 
 ```
 @article{caffepresso_cases2016,
