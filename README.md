@@ -12,7 +12,7 @@ The framework is modularized so support for new hardware platforms is simple. It
 - Adapteva Parallella/Epiphany-III SoC board -- $126
 - NVIDIA Jetson TX1 GPU platform -- $599
 - Xilinx ZC706 FPGA -- $2275
-- Also need USB cables and SD cards as required.
+- Also need USB cables (TI XDS100 programming cable) and SD cards as required.
 
 **Software**
 
