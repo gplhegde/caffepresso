@@ -1,7 +1,6 @@
-# README #
+# CaffePresso #
 
-This README would normally document whatever steps are necessary to get your application up and running.
-
+This git repository supports the CASES 2016 paper "
 ### What is this repository for? ###
 
 * Quick summary
@@ -28,8 +27,8 @@ This README would normally document whatever steps are necessary to get your app
 If you like this tool, please cite:
 
 ```
-@article{gysel2016hardware,
-  title={Hardware-oriented Approximation of Convolutional Neural Networks},
+@article{caffepresso_cases2016,
+  title={CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms},
   author={Hegde, Gopalakrishna and Siddhartha and Ramasamy, Nachiappan and Kapre, Nachiket},
  booktitle = {Proceedings of the 2016 International Conference on Compilers, Architecture and Synthesis for Embedded Systems},
   year={2016}
