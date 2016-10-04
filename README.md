@@ -18,7 +18,7 @@ The framework is modularized so support for new hardware platforms is simple. It
 
 - TI Code Composer Studio v6, IMGLIB and DSPLIB
 - Epiphany SDK (https://github.com/adapteva/epiphany-sdk)
-- CUDA + cuDNNv5 libraries
+- CUDA + cuDNNv4 libraries
 - Vectorblox bitstreams + Xilinx Vivado (https://github.com/VectorBlox/mxp/tree/master/examples/boards/zc706_arm_viv)
 - OS images for Parallella (https://www.parallella.org/create-sdcard/)
 - Caffe from caffe.berkeleyvision.org. Make sure to build it with CUDNN:=1 flag.
