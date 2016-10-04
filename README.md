@@ -1,6 +1,6 @@
 # CaffePresso #
 
-This git repository supports the CASES 2016 paper "CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms". It contains ConvNet implementations for DSP, FPGA, and NoC-based embedded accelerators. We provide a code generator that translates Caffe prototxt into low-level specifications for the various backends.
+This git repository supports the CASES 2016 paper **"CaffePresso: An Optimized Library for Deep Learning on Embedded Accelerator-based platforms"**. It contains ConvNet implementations for DSP, FPGA, and NoC-based embedded accelerators. We provide a code generator that translates Caffe prototxt into low-level specifications for the various backends.
 
 The framework is modularized so support for new hardware platforms is simple. It is also possible to change the ConvNet specifications and regenerate the implementations.
 
