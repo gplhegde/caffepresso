@@ -1,0 +1,12 @@
+#define NUM_LAYERS 2
+#define NUM_MAPS {64,256}
+#define MAP_WIDTH {28,5}
+#define MAP_HEIGHT {28,5}
+#define PATCH_WIDTH {4,5}
+#define PATCH_HEIGHT {4,5}
+#define SUBSAMPLING_FACTORS {5,4}
+#define WINDOW_SIZES {10,6}
+#define KERNEL_WIDTH {9,9}
+#define POOLING_STRIDES {1,1}
+#define CONV_STRIDES {1,1}
+#define CONV_PAD {0,0}
