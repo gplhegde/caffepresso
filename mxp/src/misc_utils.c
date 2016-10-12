@@ -6,12 +6,10 @@
 #include "pool_layer.h"
 
 float mean_normalize(uint8_t *pImg, int H, int W, float *var, float *pNormImg){
-	uint8_t max, min;
 	uint32_t sum, pixel;
 	float mean, normPixel;
 	
 	sum = 0;
-	max = 0;
 	for (pixel = 0; pixel < H * W; pixel++){
 		sum += pImg[pixel];
 	}

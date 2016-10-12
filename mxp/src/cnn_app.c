@@ -4,7 +4,7 @@
 #include "vbx.h"
 #include "vbx_port.h"
 #include "app_profile.h"
-#include "test_utility.h"
+#include "misc_utils.h"
 #ifdef CNN_SIMULATOR
 #include "sim_image.h"
 #endif // CNN_SIMULATOR
@@ -20,9 +20,10 @@ APP_STATUS_E main_cnn_app() {
 	FL_MAP_PIXEL *pInFloatMap, *pFloatInput;
 	uint8_t *pImg;
 	int prevMapH, prevMapW, prevNmaps;
-	float var, imgMean;
+	float var;
 	int prevArithMode, prevFracBits;
-	vbx_timestamp_t startTime, endTime;
+	vbx_timestamp_t startTime;
+	APP_STATUS_E status = SUCCESS;
 
 	caffe_layer_ctx_init();
 	REL_INFO("Initialized context from the LUT\n");
@@ -44,19 +45,6 @@ APP_STATUS_E main_cnn_app() {
 		return MALLOC_FAIL;
 	}
 
-#ifdef USE_MXP_SIM
-	// Simulator init
-	vbxsim_init(16,     //vector_lanes
-		64,     //KB scratchpad_size
-        256,    //max masked waves
-        16,     //fractional_bits (word)
-        15,     //fractional_bits (half)
-        4);     //fractional_bits (byte)
-#elif !defined(CNN_SIMULATOR)
-	REL_INFO("MXP Initialization....\n");
-	vbx_test_init();
-	vbx_timestamp_start();
-#endif
 	prevMapH = INPUT_IMG_HEIGHT;
 	prevMapW = INPUT_IMG_WIDTH;
 #ifdef CNN_SIMULATOR
@@ -74,11 +62,11 @@ APP_STATUS_E main_cnn_app() {
 #endif // CNN_SIMULATOR
 
 	// mean and contrast normalization
-	imgMean = mean_normalize(pImg, prevMapH * prevNmaps, prevMapW, &var, pInFloatMap);
+	mean_normalize(pImg, prevMapH * prevNmaps, prevMapW, &var, pInFloatMap);
 	DBG_MAPS(show_float_img("norm image", pInFloatMap, prevMapH, prevMapW));
 
 	pConvCtx = (CONV_LYR_CTX_T *)cnnLayerNodes[0].pLyrCtx;
-	float_to_fix_img(pInFloatMap, prevMapH * prevNmaps, prevMapW, pConvCtx->convInfo.nMapFractionBits, pInFixMap);
+	float_to_fix_data(pInFloatMap, prevMapH * prevNmaps * prevMapW, pConvCtx->convInfo.nMapFractionBits, pInFixMap);
 	DBG_MAPS(show_fix_img("input fix map", pInFixMap, prevMapH, prevMapW, pConvCtx->convInfo.nMapFractionBits));
 
 	pFixInput = pInFixMap;
@@ -98,10 +86,10 @@ APP_STATUS_E main_cnn_app() {
 				if (pConvCtx->lyrArithMode != prevArithMode) {
 					if (pConvCtx->lyrArithMode == FLOAT_POINT) {
 						DBG_INFO("Converting fix to float\n");
-						fix16_to_float_img(pFixInput, prevMapH * prevNmaps, prevMapW, prevFracBits, pFloatInput);
+						fix16_to_float_data(pFixInput, prevMapH * prevNmaps * prevMapW, prevFracBits, pFloatInput);
 					} else {
 						DBG_INFO("Converting float to fix\n");
-						float_to_fix_img(pFloatInput,  prevMapH * prevNmaps, prevMapW, prevFracBits, pFixInput);
+						float_to_fix_data(pFloatInput,  prevMapH * prevNmaps * prevMapW, prevFracBits, pFixInput);
 					}
 				}
 				// compute this layer's output
@@ -122,10 +110,10 @@ APP_STATUS_E main_cnn_app() {
 				if (pPoolCtx->lyrArithMode != prevArithMode) {
 					if (pPoolCtx->lyrArithMode == FLOAT_POINT) {
 						DBG_INFO("Converting fix to float\n");
-						fix16_to_float_img(pFixInput, prevMapH * prevNmaps, prevMapW, prevFracBits, pFloatInput);
+						fix16_to_float_data(pFixInput, prevMapH * prevNmaps * prevMapW, prevFracBits, pFloatInput);
 					} else {
 						DBG_INFO("Converting float to fix\n");
-						float_to_fix_img(pFloatInput,  prevMapH * prevNmaps, prevMapW, prevFracBits, pFixInput);
+						float_to_fix_data(pFloatInput,  prevMapH * prevNmaps * prevMapW, prevFracBits, pFixInput);
 					}
 				}
 				cnn_pool_layer(pPoolCtx, pFloatInput, pFixInput, MAP_ISOLATED);
@@ -142,10 +130,10 @@ APP_STATUS_E main_cnn_app() {
 				if (pActCtx->lyrArithMode != prevArithMode) {
 					if (pActCtx->lyrArithMode == FLOAT_POINT) {
 						DBG_INFO("Converting fix to float\n");
-						fix16_to_float_img(pFixInput, prevMapH * prevNmaps, prevMapW, prevFracBits, pFloatInput);
+						fix16_to_float_data(pFixInput, prevMapH * prevNmaps * prevMapW, prevFracBits, pFloatInput);
 					} else {
 						DBG_INFO("Converting float to fix\n");
-						float_to_fix_img(pFloatInput,  prevMapH * prevNmaps, prevMapW, prevFracBits, pFixInput);
+						float_to_fix_data(pFloatInput,  prevMapH * prevNmaps * prevMapW, prevFracBits, pFixInput);
 					}
 				}
 				cnn_activation_layer(pActCtx, pFloatInput, pFixInput);
@@ -161,10 +149,10 @@ APP_STATUS_E main_cnn_app() {
 				if (pIpCtx->lyrArithMode != prevArithMode) {
 					if (pIpCtx->lyrArithMode == FLOAT_POINT) {
 						DBG_INFO("Converting fix to float\n");
-						fix16_to_float_img(pFixInput, prevMapH * prevNmaps, prevMapW, prevFracBits, pFloatInput);
+						fix16_to_float_data(pFixInput, prevMapH * prevNmaps * prevMapW, prevFracBits, pFloatInput);
 					} else {
 						DBG_INFO("Converting float to fix\n");
-						float_to_fix_img(pFloatInput,  prevMapH * prevNmaps, prevMapW, prevFracBits, pFixInput);
+						float_to_fix_data(pFloatInput,  prevMapH * prevNmaps * prevMapW, prevFracBits, pFixInput);
 					}
 				}
 				inner_prod_layer(pIpCtx, pFloatInput, pFixInput);
@@ -190,4 +178,6 @@ APP_STATUS_E main_cnn_app() {
 	DBG_MAPS(cvWaitKey(100000));
 	REL_INFO("Relesaing buffers\n");
 	cnn_app_memfree(cnnLayerNodes, NO_DEEP_LAYERS);
+
+	return status;
 }

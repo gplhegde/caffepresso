@@ -1,6 +1,6 @@
 #include "app_init.h"
-#include "test_utility.h"
 #include "debug_control.h"
+#include "misc_utils.h"
 #include <string.h>
 
 APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
@@ -10,10 +10,10 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 	// generate random kernel and convert them to fix point
 	for ( i = 0; i < pConvCtx->convInfo.nInMaps; i++) {
 		for (k = 0; k < pConvCtx->convInfo.nOutMaps; k++) {
-			generate_random_kernel(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
-				pConvCtx->convInfo.K * pConvCtx->convInfo.K);
-			float_to_fix_img(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
-				pConvCtx->convInfo.K, pConvCtx->convInfo.K,
+			generate_random_data(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
+				pConvCtx->convInfo.K * pConvCtx->convInfo.K, i*k+k);
+			float_to_fix_data(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
+				pConvCtx->convInfo.K * pConvCtx->convInfo.K,
 				pConvCtx->convInfo.nKerFractionBits,
 				pConvCtx->pFixKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K);
 		}
@@ -34,9 +34,8 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 	}
 
 	// Init bias of conv layer.
-	generate_random_kernel(pConvCtx->pFloatBias, pConvCtx->convInfo.nOutMaps);
-	float_to_fix_img(pConvCtx->pFloatBias,
-		1,
+	generate_random_data(pConvCtx->pFloatBias, pConvCtx->convInfo.nOutMaps, 123);
+	float_to_fix_data(pConvCtx->pFloatBias,
 		pConvCtx->convInfo.nOutMaps,
 		pConvCtx->convInfo.nKerFractionBits,
 		pConvCtx->pFixBias);
@@ -44,8 +43,8 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 }
 
 APP_STATUS_E init_ip_layer_params(IP_LYR_CTX_T *pIpCtx) {
-	generate_random_kernel(pIpCtx->pFloatWeight, pIpCtx->ipInfo.nOutput * pIpCtx->ipInfo.nInput);
-	generate_random_kernel(pIpCtx->pFloatBias, pIpCtx->ipInfo.nOutput);
+	generate_random_data(pIpCtx->pFloatWeight, pIpCtx->ipInfo.nOutput * pIpCtx->ipInfo.nInput, 1234);
+	generate_random_data(pIpCtx->pFloatBias, pIpCtx->ipInfo.nOutput, 4321);
 	
 	return SUCCESS;
 }

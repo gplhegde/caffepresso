@@ -1,5 +1,4 @@
 MAKEFILE_TOP_DIR=$(shell pwd)
-MXP_SIM=1
 MXP_FRWK_SRC_DIR=./src
 TEST_SRC_DIR=./test
 MXP_FRWK_INC_DIR=$(shell pwd)/inc

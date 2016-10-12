@@ -2,7 +2,7 @@
 #define _APP_INIT_H_
 #include "struct_defs.h"
 #include "cnn_layers.h"
-//#include "caffe_"
+
 APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx);
 
 APP_STATUS_E init_ip_layer_params(IP_LYR_CTX_T *pIpCtx);

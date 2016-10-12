@@ -1,0 +1,19 @@
+MAKEFILE_TOP_DIR=$(shell pwd)
+MXP_FRWK_SRC_DIR=./src
+MXP_FRWK_INC_DIR=$(shell pwd)/inc
+
+CMACRO_DEFS= -DMXP_PROFILE
+#include ./scripts/xil_app_vars.mk
+include sources.mk
+
+#ALT_LIBRARY_ROOT_DIR := ./lib/vbxware
+#include ./lib/vbxware/public.mk
+#ALT_LIBRARY_ROOT_DIR := ./lib/vbxtest
+#include ./lib/vbxtest/public.mk
+#ALT_LIBRARY_ROOT_DIR := ./lib/scalar
+#include ./lib/scalar/public.mk
+#ALT_LIBRARY_ROOT_DIR := ./lib/libfixmath
+#include ./lib/libfixmath/public.mk
+
+include ./scripts/xil_app.mk
+

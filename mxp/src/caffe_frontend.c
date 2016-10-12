@@ -127,7 +127,7 @@ void caffe_layer_ctx_init() {
 
 // Internal parameter initialization apart from caffe prototxt config parameters.
 void cnn_layer_internal_param_init(void) {
-	int lyr, opt_maps, block_w, conv_lyr;
+	int lyr, conv_lyr;
 	CONV_LYR_CTX_T *pConvCtx;
 	POOL_LYR_CTX_T *pPoolCtx;
 	ACT_LYR_CTX_T *pActCtx;
@@ -143,7 +143,6 @@ void cnn_layer_internal_param_init(void) {
 				pConvCtx = (CONV_LYR_CTX_T *)cnnLayerNodes[lyr].pLyrCtx;
 				pConvCtx->convInfo.nKerFractionBits = 11;
 				pConvCtx->convInfo.nMapFractionBits = 15;
-				pConvCtx->convInfo.nScaleFractionBits = 10;
 				pConvCtx->optType = SCALAR;
 				//pConvCtx->optType = VECTOR_MXP;
 				pConvCtx->lyrArithMode = FLOAT_POINT;
@@ -152,7 +151,6 @@ void cnn_layer_internal_param_init(void) {
 				// TODO:The block information should come from patch size optimizer.
 				// Setting them to input map dimensions as of now.
 				REL_INFO("Layer : %d, Type : %d, opt = %d\n", lyr, cnnLayerNodes[lyr].lyrType, pConvCtx->optType);
-				block_w = get_opt_block_width(pConvCtx->convInfo.mapW, pConvCtx->convInfo.K, pConvCtx->convInfo.nOutMaps, 65536, &opt_maps);
 				pConvCtx->blkInfo = (BLK_INFO_T) {.blkH = pConvCtx->convInfo.mapH,
 					//.blkW = pConvCtx->convInfo.mapW,
 					.blkW = optWidth[conv_lyr],

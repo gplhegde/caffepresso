@@ -17,7 +17,7 @@
 */
 inline static void acc_all_map_rows(FP_MAP_PIXEL *pMapRow, int32_t * pAcc, FP_MAP_PIXEL *pAccMapRow,
     int W, int nCurMaps, int nPrevMaps){
-    int con, vl, map;
+    int vl, map;
     vbx_get_vl(&vl);
 	vbx(SVH, VMUL, pAccMapRow, 0, pAccMapRow);
     vbx_set_vl(W);
@@ -88,7 +88,7 @@ APP_STATUS_E vector_block_conv_layer(FP_MAP_PIXEL *pImap, FP_KERNEL **ppExtKer, 
 	FP_MAP_PIXEL *spMapRow, **sppAccMapRows, *spFiltRow, *spTemp;
 	int32_t *spAcc, *spProd;
 	FP_KERNEL *spExtKerPing, *spExtKerPong, *spTempKer;
-	int map, row, kr, fixScale, kc, s;
+	int row, kr, kc;
 
     // Allocate memory to hold buffer pointers
     sppAccMapRows = (FP_MAP_PIXEL **)malloc(pConvInfo->K * sizeof(FP_MAP_PIXEL *));
@@ -401,7 +401,7 @@ static void get_concat_feature_blocks(FP_MAP_PIXEL *pInMaps, int rowOffset,
 static void get_feature_block(FP_MAP_PIXEL *pInMap, int rowOffset,
 	int colOffset, int blkH, int blkW, int W, int mapW, FP_MAP_PIXEL *pFeatureBlk) {
 
-	int row, map;
+	int row;
 	for ( row = 0; row < blkH; row++) {
 			memcpy(pFeatureBlk + row * blkW,
 			pInMap + (row + rowOffset) * mapW + colOffset,

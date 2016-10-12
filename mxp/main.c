@@ -1,36 +1,20 @@
 #include <stdio.h>
 #include "debug_control.h"
 #include "unit_test.h"
+#include "vbx.h"
+#include "vbx_test.h"
 
-int test_layers();
 void mxp_init();
 
 int main(void) {
-	//mxp_init();
-	test_layers();
+	mxp_init();
+	//TODO: enable this once block optimizer is complete
+	//main_cnn_app();
 	printf("Application complete\n");
 	return 0;
 }
 
 
-int test_layers() {
-	TEST_STATUS_E status;
-#if 0
-	status = test_pool_layer();
-	if(status != TEST_PASS) {
-		REL_INFO("Pool layer test failed\nError = %d\n", status);
-		REL_INFO("Aborting...\n");
-		return -1;
-	}
-#endif
-	status = test_conv_layer();
-	if(status != TEST_PASS) {
-		REL_INFO("Conv layer test failed\nError = %d\n", status);
-		REL_INFO("Aborting...\n");
-		return -1;
-	}
-	return status;
-}
 
 void mxp_init() {
 #ifdef USE_MXP_SIM
