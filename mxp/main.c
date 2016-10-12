@@ -2,7 +2,9 @@
 #include "debug_control.h"
 #include "unit_test.h"
 #include "vbx.h"
+#ifndef VBX_SIMULATOR
 #include "vbx_test.h"
+#endif
 
 void mxp_init();
 
@@ -17,7 +19,7 @@ int main(void) {
 
 
 void mxp_init() {
-#ifdef USE_MXP_SIM
+#ifdef VBX_SIMULATOR
 	// Simulator init
 	REL_INFO("Initializing MXP Simulator\n");
 	vbxsim_init(16,     //vector_lanes
@@ -26,7 +28,7 @@ void mxp_init() {
 		16,     //fractional_bits (word)
 		15,     //fractional_bits (half)
 		4);     //fractional_bits (byte)
-#elif !defined(CNN_SIMULATOR)
+#else
 	REL_INFO("MXP Initialization....\n");
 	vbx_test_init();
 	vbx_timestamp_start();

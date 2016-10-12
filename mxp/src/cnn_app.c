@@ -47,7 +47,7 @@ APP_STATUS_E main_cnn_app() {
 
 	prevMapH = INPUT_IMG_HEIGHT;
 	prevMapW = INPUT_IMG_WIDTH;
-#ifdef CNN_SIMULATOR
+/*#ifdef VBX_SIMULATOR
 	prevNmaps = 1;
 	pImg = read_gray_image("lena.png", &prevMapH, &prevMapW);
 	if ((prevMapH != INPUT_IMG_HEIGHT) || (prevMapW != INPUT_IMG_WIDTH)) {
@@ -56,18 +56,18 @@ APP_STATUS_E main_cnn_app() {
 		REL_INFO("Change the image size definitions in caffe_proto_params.h\n");
 		return FAILED;
 	}
-#else
+#else*/
 	prevNmaps = NO_INPUT_MAPS;
 	pImg = (uint8_t *) malloc(prevMapW * prevMapH * prevNmaps * sizeof(uint8_t));
-#endif // CNN_SIMULATOR
+//#endif // CNN_SIMULATOR
 
 	// mean and contrast normalization
 	mean_normalize(pImg, prevMapH * prevNmaps, prevMapW, &var, pInFloatMap);
-	DBG_MAPS(show_float_img("norm image", pInFloatMap, prevMapH, prevMapW));
+	//DBG_MAPS(show_float_img("norm image", pInFloatMap, prevMapH, prevMapW));
 
 	pConvCtx = (CONV_LYR_CTX_T *)cnnLayerNodes[0].pLyrCtx;
 	float_to_fix_data(pInFloatMap, prevMapH * prevNmaps * prevMapW, pConvCtx->convInfo.nMapFractionBits, pInFixMap);
-	DBG_MAPS(show_fix_img("input fix map", pInFixMap, prevMapH, prevMapW, pConvCtx->convInfo.nMapFractionBits));
+	//DBG_MAPS(show_fix_img("input fix map", pInFixMap, prevMapH, prevMapW, pConvCtx->convInfo.nMapFractionBits));
 
 	pFixInput = pInFixMap;
 	pFloatInput = pInFloatMap;
@@ -175,7 +175,7 @@ APP_STATUS_E main_cnn_app() {
 		}
 	}
 	PRINT_RUNTIME("App main loop runtime", startTime);
-	DBG_MAPS(cvWaitKey(100000));
+	//DBG_MAPS(cvWaitKey(100000));
 	REL_INFO("Relesaing buffers\n");
 	cnn_app_memfree(cnnLayerNodes, NO_DEEP_LAYERS);
 

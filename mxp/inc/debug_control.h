@@ -6,7 +6,7 @@
 #define REL_INFO(ARGS...)	printf(ARGS)
 #define REL_ASSERT(ARGS...) assert(ARGS)
 
-#if defined(MXP_PROFILE) && !defined(CNN_SIMULATOR)
+#if defined(MXP_PROFILE) && !defined(VBX_SIMULATOR)
 #define DBG_INFO(ARGS...)
 #define DBG_ASSERT(ARGS...)
 #else
@@ -14,7 +14,7 @@
 #define DBG_ASSERT(ARGS...)	assert(ARGS)
 #endif
 
-#ifdef CNN_SIMULATOR
+#ifdef VBX_SIMULATOR
 #define DBG_MAPS(x)		x
 #else
 #define DBG_MAPS(x)
