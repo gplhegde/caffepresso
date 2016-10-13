@@ -49,19 +49,52 @@ def dump_model(net_def_file, model_file):
     net = caffe.Net(net_def_file, model_file, caffe.TEST)
 
     param_layers = net.params.keys()
-    lyr_name = 0
+    lyr_idx = 0
+    w_name = ''
+    b_name = ''
+    conv_w_ptrs = []
+    conv_b_ptrs = []
+    ip_w_ptrs = []
+    ip_b_ptrs = []
     for lyr in net.layers:
         if(lyr.type == 'Convolution'):
-            dump_conv_weights(net, param_layers[lyr_name], model_src_file, model_inc_file)
-            lyr_name += 1
+            w_name = param_layers[lyr_idx] + '_weights'
+            b_name = param_layers[lyr_idx] + '_bias'
+            dump_conv_weights(net, param_layers[lyr_idx], model_src_file, model_inc_file, w_name, b_name)
+            conv_w_ptrs.append(w_name)
+            conv_b_ptrs.append(b_name)
+            lyr_idx += 1
         elif(lyr.type == "InnerProduct"):
-            dump_ip_weights(net, param_layers[lyr_name], model_src_file, model_inc_file)
-            lyr_name += 1
+            w_name = param_layers[lyr_idx] + '_weights'
+            b_name = param_layers[lyr_idx] + '_bias'
+            dump_ip_weights(net, param_layers[lyr_idx], model_src_file, model_inc_file, w_name, b_name)
+            ip_w_ptrs.append(w_name)
+            ip_b_ptrs.append(b_name)
+            lyr_idx += 1
         elif(lyr.type == "BatchNorm"):
-            lyr_name += 1
+            lyr_idx += 1
             print('We do not support batch normalization layer yet')
 
+    # create an array containing pointers to all the arrays created.
+    conv_w_ptr_arr = 'const float * conv_w_ptrs[] = {'
+    conv_b_ptr_arr = 'const float * conv_b_ptrs[] = {'
+    ip_w_ptr_arr = 'const float * ip_w_ptrs[] = {'
+    ip_b_ptr_arr = 'const float * ip_b_ptrs[] = {'
+    for wp, bp in zip(conv_w_ptrs[:-1], conv_b_ptrs[:-1]):
+        conv_w_ptr_arr = conv_w_ptr_arr + wp + ', '
+        conv_b_ptr_arr = conv_b_ptr_arr + bp + ', '
+    conv_w_ptr_arr = conv_w_ptr_arr + conv_w_ptrs[-1] + '};'
+    conv_b_ptr_arr = conv_b_ptr_arr + conv_b_ptrs[-1] + '};'
+
+    for wp, bp in zip(ip_w_ptrs[:-1], ip_b_ptrs[:-1]):
+        ip_w_ptr_arr = ip_w_ptr_arr + wp + ', '
+        ip_b_ptr_arr = ip_b_ptr_arr + bp + ', '
+    ip_w_ptr_arr = ip_w_ptr_arr + ip_w_ptrs[-1] + '};'
+    ip_b_ptr_arr = ip_b_ptr_arr + ip_b_ptrs[-1] + '};'
+
+
     h_file = open(model_inc_file, 'a')
+    h_file.write(conv_w_ptr_arr + '\n' + conv_b_ptr_arr + '\n' + ip_w_ptr_arr + '\n' + ip_b_ptr_arr + '\n')
     h_file.write('#endif // _NETWORK_MODEL_H_')
     h_file.close()
 
