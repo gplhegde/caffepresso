@@ -12,7 +12,7 @@ LayerParamContainer = {
 	"nOutMaps"	: [-1, "int"],
 	"winSize"	: [-1, "int"],
 	"stride"	: [-1, "int"],
-        "pad"           : [0, "int"],
+	"pad"		: [0, "int"],
 	"poolType"	: [-1, "POOL_TYPE_E"],
 	"actType"	: [-1, "ACT_TYPE_E"],
 	"nOutputs"	: [-1, "int"]

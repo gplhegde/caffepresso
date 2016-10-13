@@ -1,8 +1,10 @@
+import sys
 import caffe_pb2
 import argparse
 from copy import deepcopy
 import collections
 from google.protobuf.text_format import Merge
+from termcolor import cprint
 from layer_defs import LayerParamContainer, LayerEnums, ActivationEmums, PoolTypeEnums
 
 headerFileName = "caffe_proto_params.h"
@@ -43,6 +45,8 @@ class DnnHeaderCreater(object):
 			convParam["stride"][0] 		= lyr.convolution_param.stride[0]
 		else:
 			convParam["stride"][0] 		= 1
+		if(lyr.convolution_param.pad):
+			convParam["pad"][0] = lyr.convolution_param.pad[0]
 		convParam["topCon"] 		= str(lyr.top[0])
 		convParam["botCon"]			= str(lyr.bottom[0])
 		convParam["lyrName"]		= lyr.name
@@ -55,6 +59,7 @@ class DnnHeaderCreater(object):
 		poolParam["stride"][0]		= lyr.pooling_param.stride
 		poolParam["winSize"][0]		= lyr.pooling_param.kernel_size
 		poolParam["poolType"][0] 	= lyr.pooling_param.pool
+		poolParam["pad"][0]			= lyr.pooling_param.pad
 		poolParam["topCon"] 		= str(lyr.top[0])
 		poolParam["botCon"]			= str(lyr.bottom[0])
 		poolParam["lyrName"]		= lyr.name
@@ -145,7 +150,6 @@ class DnnHeaderCreater(object):
 		print("Input height = " + str(self.inputHeight))
 		print("Input width = " + str(self.inputWidth))
 		print("Input's top connection = " + self.inputTopCon)
-		#print self.strArray
 		print("List of struct as parsed from the prototxt")
 		for e in self.strArray:
 			print(e)
@@ -201,6 +205,7 @@ class DnnHeaderCreater(object):
 			self.sfile.write(".nOutMaps = " + str(lyr["nOutMaps"][0]) + ",\n")
 			self.sfile.write(".winSize = " + str(lyr["winSize"][0]) + ",\n")
 			self.sfile.write(".stride = " + str(lyr["stride"][0]) + ",\n")
+			self.sfile.write(".pad = " + str(lyr["pad"][0]) + ",\n")
 			self.sfile.write(".poolType = " + str(PoolTypeEnums[lyr["poolType"][0]]) + ",\n")
 			self.sfile.write(".actType = " + str(lyr["actType"][0]) + ",\n")
 			self.sfile.write(".nOutputs = " + str(lyr["nOutputs"][0]) + ",\n")
@@ -226,17 +231,8 @@ class DnnHeaderCreater(object):
 			ops = in_width * in_height * no_input * no_output * 2 * k * k
 			ops += in_width * in_height * no_input * no_output
 			ops = ops / (stride ** 2)
-			#print('conv ops ='+ str(ops))
-            # compute no of memory read and writes
-            # optimum block width
-			#bw = math.ceil(sp_size / (2*k*no_output + 16*no_output + 2))
-			#no_blks = math.ceil(in_width / (bw-k +1))
 			bw = in_width
 			no_blks = 1
-			#rd_ops = no_input* no_blks* (2*in_height*bw + bw*in_height*2 + in_height*k*k*bw*no_output*2) + \
-			#    no_input*(in_width-k+1)*(in_height-k+1)*no_output*2 + (in_width-k+1)*(in_height-k+1)*no_output*4
-			#wr_ops = no_input*no_blks*(2*no_output*(in_height-k+1)*(in_height-k+1) + bw*in_height*no_output*2) \
-			#    + 4*no_input*(in_height-k+1)*(in_width-k+1)*no_output + 2*no_output*(in_height-k+1)*(in_width-k+1)
 			rd_ops = no_input* no_blks* (2*in_height*bw + bw*in_height*2 + in_height*k*k*bw*no_output*2) + \
 			    no_input*(in_width-k+1)*(in_height-k+1)*no_output*2 + (in_width-k+1)*(in_height-k+1)*no_output*4
 			wr_ops = no_input*no_blks*(2*no_output*(in_height-k+1)*(in_height-k+1) + bw*in_height*no_output*2) \
@@ -249,8 +245,6 @@ class DnnHeaderCreater(object):
 			ops = in_width * in_height * (win_size * win_size - 1)
 			ops = ops * n_maps
 			ops = ops / (stride ** 2)
-			#print('pool ops ='+ str(ops))
-            # memory ops
 			rd_ops = n_maps * in_height * in_width *2
 			wr_ops = (n_maps * in_height * in_width * 2)/(stride**2)
 			print rd_ops
@@ -259,7 +253,6 @@ class DnnHeaderCreater(object):
 		def relu_ops(in_width, in_height, n_maps):
 			print 'relu:', in_width, in_height, n_maps
 			ops = in_width * in_height * n_maps
-			#print('relu ops ='+ str(ops))
 			rd_ops = n_maps * in_width* in_height * 2
 			wr_ops = n_maps * in_width* in_height * 2
 			print rd_ops
@@ -267,7 +260,6 @@ class DnnHeaderCreater(object):
 		def fc_ops(no_input, no_output):
 			print 'fc', no_input, no_output
 			ops = 2 * no_input * no_output
-			#print('fc ops ='+ str(ops))
 			rd_ops = no_input * no_output* 2* 8
 			wr_ops = no_output * 4
 			print rd_ops
@@ -334,42 +326,57 @@ def create_header(prototxtFile):
 	hfile.write(docString)
 	sfile.write(docString)
 	sfile.write("#include " + '"' + headerFileName + '"'+ "\n\n")
+
 	# find the total number of layers in the network. Input layer is not counted as it is a data layer.
 	# hence -1 
 	NumCnnLayers = len(net.layer)
 	hfile.write("#define NO_DEEP_LAYERS " + str(NumCnnLayers-1) + "\n")
+
 	# create header file writer object
 	hw = DnnHeaderCreater(net, hfile, sfile)
-	#hw.print_container()
+
 	hw.parse_params()
-	#hw.print_container()
+
+	# make sure the structures are arranged in the layer connection format
 	hw.order_structures()
 	hfile.write("#define INPUT_IMG_WIDTH " + str(hw.inputWidth) + "\n")
 	hfile.write("#define INPUT_IMG_HEIGHT " + str(hw.inputHeight) + "\n")
 	hfile.write("#define NO_INPUT_MAPS " + str(hw.noInputMaps) + "\n")
-	#hw.print_container()
+
+	# write general struct definition to the header file
 	hw.write_struct_definition(structName)
+
 	# declare the array of structure
 	hfile.write("extern " + "const " + structName + " " + arrayName + "[NO_DEEP_LAYERS];\n\n")
 	hw.write_struct_array(structName)
 
-	# 
-	# write the #endif
+	# write the header end string
 	hfile.write(endString)
-	#hw.print_container()
-	hw.compute_no_ops()
+
+    # print approx no of operations present in the network
+	#hw.compute_no_ops()
+
 	hfile.close()
 	sfile.close()
+	cprint('Generated source files successfully', 'green')
+	cprint('Copy {:s} and {:s} to the main project src and inc directories respectively.'.format(sourceFileName, headerFileName), 'green')
+
+def parse_args():
+    """Argument parser for this tool
+    """
+    parser = argparse.ArgumentParser(description='LMDB model to source file generator.')
+    parser.add_argument('--model', dest='model_file', help='Network definition file in .prototxt format.')
+
+    # parse command line args
+    if(len(sys.argv) < 2):
+        parser.print_help()
+        sys.exit()
+    args = parser.parse_args()
+    return args
 
 if __name__ == '__main__':
-	# Argument parser
-	parser = argparse.ArgumentParser(description = "Create C header file from deployable Caffe prototxt file")
-	parser.add_argument("-f", "--protofile", required = True, help = "Caffe prototxt file")
 
 	# parse the arguments
-	args = vars(parser.parse_args())
+	args = parse_args()
 
-	create_header(args["protofile"])
-
-
-
+	create_header(args.model_file)
