@@ -57,7 +57,7 @@ APP_STATUS_E scalar_fix_ip_layer(IP_LYR_CTX_T *pIpCtx, FP_MAP_PIXEL *pFixInput) 
 
 	int n;
 	REL_ASSERT(pIpCtx->ipInfo.nKerFractionBits == pIpCtx->ipInfo.nMapFractionBits);
-	for ( n = 0; n < pIpCtx->ipInfo.nOutput; n++) {
+	for (n = 0; n < pIpCtx->ipInfo.nOutput; n++) {
 		pIpCtx->pFixOutput[n] = fix16_dot_prod(pFixInput, pIpCtx->pFixWeight + n * pIpCtx->ipInfo.nInput,
 			pIpCtx->ipInfo.nInput, pIpCtx->ipInfo.nKerFractionBits);
 	}
@@ -145,7 +145,6 @@ APP_STATUS_E inner_prod_layer(IP_LYR_CTX_T *pIpCtx, FL_MAP_PIXEL *pFloatInput, F
             }
             break;
         case FIXED_POINT:
-			REL_INFO("FIXED_POINT mode for INNER_PROD layer is not supported as of now\n");
             switch(pIpCtx->optType) {
                 case SCALAR:
 					DBG_INFO("Scalar fixed point inner product layer\n");

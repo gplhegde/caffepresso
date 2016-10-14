@@ -101,7 +101,7 @@ TEST_STATUS_E test_pool_layer() {
 
 	cnn_pool_layer(&poolCtx, pFltInput, pFixInput, MAP_ISOLATED);
 	poolCtx.lyrArithMode = FIXED_POINT; 
-	poolCtx.optType = VECTOR_MXP;
+	//poolCtx.optType = VECTOR_MXP;
 	cnn_pool_layer(&poolCtx, pFltInput, pFixInput, MAP_ISOLATED);
 
 	//print_float_img(poolCtx.pFloatOutput, outHeight, outWidth);

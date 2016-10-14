@@ -1,0 +1,50 @@
+exec=test_app
+OBJ_DIR = test-obj
+CC=gcc
+MKAEFILE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+MXP_FRWK_SRC_DIR := ./src
+TEST_SRC_DIR := ./test
+MXP_FRWK_INC_DIR := $(shell pwd)/inc
+SIM_DIR= sim
+C_SRCS =
+C_SRCS += test_main.c
+C_SRCS += $(wildcard $(TEST_SRC_DIR)/*.c)
+C_SRCS += $(wildcard $(MXP_FRWK_SRC_DIR)/*.c)
+include sim/sim_srcs.mk
+
+SIM_LIB_DIR :=$(MAKEFILE_DIR)sim/lib
+INC_DIR := $(wildcard $(SIM_LIB_DIR)/*)
+INC_DIR_FLAGS := $(addprefix -I, $(INC_DIR)) -I$(SIM_DIR) -I$(MXP_FRWK_INC_DIR)
+LIB_DIR_FLAGS := $(addprefix -L, $(wildcard $(SIM_LIB_DIR)/*))
+
+CFLAGS =  $(INC_DIR_FLAGS) $(LIB_DIR_FLAGS) -lvbxsim -lvbxapi -DVBX_SIMULATOR -std=c99 -g
+C_OBJS = $(addprefix $(OBJ_DIR)/, $(notdir $(patsubst %.c, %.o, $(filter %.c, $(C_SRCS)))))
+vpath %.c $(dir $(C_SRCS))
+
+all: obj $(exec)
+
+$(exec):$(C_OBJS)
+	@echo "Linking..."
+	$(CC) -o $@ $(C_OBJS) $(CFLAGS) -lm
+
+$(C_OBJS):$(OBJ_DIR)/%.o:%.c
+	@echo "Building $< ..."
+	$(CC) -c $(CFLAGS) $< -o $@
+
+obj:
+	mkdir -p $(OBJ_DIR)
+
+run: obj $(exec)
+	./$(exec)
+
+.phony: print clean
+print:
+	@echo "C_SRCS = $(C_SRCS)"
+	@echo "C_OBJS = $(C_OBJS)"
+	@echo "INC_DIR_FLAGS = $(INC_DIR_FLAGS)"
+	@echo "LIB_DIR_FLAGS = $(LIB_DIR_FLAGS)"
+	@echo "CFLAGS = $(CFLAGS)"
+
+clean:
+	rm -rf $(exec) $(OBJ_DIR)
+

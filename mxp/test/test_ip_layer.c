@@ -13,7 +13,7 @@ void compute_ip_ref(IP_LYR_CTX_T *pCtx, FL_MAP_PIXEL *pFloatInput) {
 		for(in = 0; in < pCtx->ipInfo.nInput; in++) {
 			sum += pCtx->pFloatWeight[out * pCtx->ipInfo.nInput + in] * pFloatInput[in];
 		}
-		pCtx->pFloatOutput[out] = sum;
+		pRefFltOutput[out] = sum + pCtx->pFloatBias[out];
 	}
 }
 
@@ -25,7 +25,7 @@ CMP_STATUS_T compare_ip_out(IP_LYR_CTX_T *pCtx, FL_MAP_PIXEL *pOutput) {
 	status.flag = TEST_PASS;
 
 	for(int out = 0; out < pCtx->ipInfo.nOutput; out++) {
-		if(fabs(pOutput[out] - pConvRefFltOutput[out]) > ERR_THRESHOLD) {
+		if(fabs(pOutput[out] - pRefFltOutput[out]) > ERR_THRESHOLD) {
 			status.misMap = 1;
 			status.misRow = 1;
 			status.misCol = out;
@@ -47,12 +47,12 @@ TEST_STATUS_E test_ip_layer() {
 	IP_LYR_CTX_T ipCtx;
 
 	printf("Testing Inner product Layer\n");
-	noInputs = 300;
-	noOutputs = 200;
+	noInputs = 16;
+	noOutputs = 32;
 	nMapFracBits = 13;
 	nKerFracBits = 13;
 
-	ipCtx.ipInfo = (CONV_INFO_T){noInputs, noOutputs, nKerFracBits, nMapFracBits};
+	ipCtx.ipInfo = (IP_INFO_T){noInputs, noOutputs, nKerFracBits, nMapFracBits};
 	ipCtx.lyrArithMode = FLOAT_POINT; 
 	ipCtx.optType = SCALAR;
 
@@ -78,10 +78,10 @@ TEST_STATUS_E test_ip_layer() {
 	float_to_fix_data(ipCtx.pFloatBias, noOutputs, nMapFracBits, ipCtx.pFixBias);
 
 
-	cnn_ip_layer(&ipCtx, pFltInput, pFixInput);
+	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
 	ipCtx.lyrArithMode = FIXED_POINT; 
 	//ipCtx.optType = VECTOR_MXP;
-	cnn_ip_layer(&ipCtx, pFltInput, pFixInput);
+	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
 
 	print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
 
@@ -89,6 +89,7 @@ TEST_STATUS_E test_ip_layer() {
 	print_float_img(pRefFltOutput, 1, noOutputs);
 
 	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
+	printf("Comparing floating point output\n");
 	check_cmp_status(&status);
 
 	fix16_to_float_data(ipCtx.pFixOutput, noOutputs, nMapFracBits, ipCtx.pFloatOutput);
