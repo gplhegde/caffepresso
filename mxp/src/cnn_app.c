@@ -9,22 +9,9 @@
 #include "sim_image.h"
 #endif // CNN_SIMULATOR
 
-APP_STATUS_E main_cnn_app() {
-	int lyr;
-	CONV_LYR_CTX_T *pConvCtx;
-	POOL_LYR_CTX_T *pPoolCtx;
-	ACT_LYR_CTX_T *pActCtx;
-	IP_LYR_CTX_T * pIpCtx;
-	SMAX_LYR_CTX_T *pSmaxCtx;
-	FP_MAP_PIXEL *pInFixMap, *pFixInput;
-	FL_MAP_PIXEL *pInFloatMap, *pFloatInput;
-	uint8_t *pImg;
-	int prevMapH, prevMapW, prevNmaps;
-	float var;
-	int prevArithMode, prevFracBits;
-	vbx_timestamp_t startTime;
+APP_STATUS_E main_cnn_app_init() {
 	APP_STATUS_E status = SUCCESS;
-
+	
 	caffe_layer_ctx_init();
 	REL_INFO("Initialized context from the LUT\n");
 
@@ -36,6 +23,23 @@ APP_STATUS_E main_cnn_app() {
 
 	cnn_app_model_init(cnnLayerNodes, NO_DEEP_LAYERS);
 	REL_INFO("Initialized model weights and biases of all layers\n");
+}
+
+APP_STATUS_E main_cnn_app(uint8_t *pImage, int *pLabel) {
+	int lyr;
+	CONV_LYR_CTX_T *pConvCtx;
+	POOL_LYR_CTX_T *pPoolCtx;
+	ACT_LYR_CTX_T *pActCtx;
+	IP_LYR_CTX_T * pIpCtx;
+	SMAX_LYR_CTX_T *pSmaxCtx;
+	FP_MAP_PIXEL *pInFixMap, *pFixInput;
+	FL_MAP_PIXEL *pInFloatMap, *pFloatInput;
+	int prevMapH, prevMapW, prevNmaps;
+	float var;
+	int prevArithMode, prevFracBits;
+	vbx_timestamp_t startTime;
+	APP_STATUS_E status = SUCCESS;
+
 
 	// allocate memory for input maps.
 	if((NULL == (pInFloatMap = (FL_MAP_PIXEL *)malloc(INPUT_IMG_WIDTH * INPUT_IMG_HEIGHT * NO_INPUT_MAPS * sizeof(FL_MAP_PIXEL)))) ||
@@ -47,22 +51,10 @@ APP_STATUS_E main_cnn_app() {
 
 	prevMapH = INPUT_IMG_HEIGHT;
 	prevMapW = INPUT_IMG_WIDTH;
-/*#ifdef VBX_SIMULATOR
-	prevNmaps = 1;
-	pImg = read_gray_image("lena.png", &prevMapH, &prevMapW);
-	if ((prevMapH != INPUT_IMG_HEIGHT) || (prevMapW != INPUT_IMG_WIDTH)) {
-		REL_INFO("The image size is more than the allocated buffer size.\n");
-		REL_INFO("Image size = %dx%d\tAllocate buffer size = %dx%d\n", prevMapW, prevMapH, INPUT_IMG_WIDTH, INPUT_IMG_HEIGHT);
-		REL_INFO("Change the image size definitions in caffe_proto_params.h\n");
-		return FAILED;
-	}
-#else*/
 	prevNmaps = NO_INPUT_MAPS;
-	pImg = (uint8_t *) malloc(prevMapW * prevMapH * prevNmaps * sizeof(uint8_t));
-//#endif // CNN_SIMULATOR
 
 	// mean and contrast normalization
-	mean_normalize(pImg, prevMapH * prevNmaps, prevMapW, &var, pInFloatMap);
+	mean_normalize((uint8_t *)pImage, prevMapH * prevNmaps, prevMapW, &var, pInFloatMap);
 	//DBG_MAPS(show_float_img("norm image", pInFloatMap, prevMapH, prevMapW));
 
 	pConvCtx = (CONV_LYR_CTX_T *)cnnLayerNodes[0].pLyrCtx;
@@ -176,6 +168,7 @@ APP_STATUS_E main_cnn_app() {
 	}
 	PRINT_RUNTIME("App main loop runtime", startTime);
 	//DBG_MAPS(cvWaitKey(100000));
+	// TODO: take last layer output and find the max probability/label
 	REL_INFO("Relesaing buffers\n");
 	cnn_app_memfree(cnnLayerNodes, NO_DEEP_LAYERS);
 

@@ -1,8 +1,8 @@
 #include "sim_image.h"
 #include "debug_control.h"
 
-#if 0
 void write_image(const char *name, char *imgData, int nRows, int nCols) {
+#if 0
 	CvSize size;
 
 	size.height = nRows;
@@ -11,9 +11,11 @@ void write_image(const char *name, char *imgData, int nRows, int nCols) {
 
 	outputImg->imageData = imgData;
 	cvSaveImage(name, outputImg, NULL);
+#endif
 }
 
 void show_image(const char *name, char *imgData, int nRows, int nCols) {
+#if 0
 	CvSize size;
 
 	size.height = nRows;
@@ -21,11 +23,13 @@ void show_image(const char *name, char *imgData, int nRows, int nCols) {
 	IplImage * dispImg = cvCreateImageHeader(size, IPL_DEPTH_8U, 1);
 	dispImg->imageData = imgData;
 	cvShowImage(name, dispImg);
+#endif
 }
 
 uint8_t * read_gray_image(const char *fileName, int *H, int *W) {
-	CvSize orgSize;
 	uint8_t *data;
+#if 0
+	CvSize orgSize;
 
 	IplImage* colorImg = cvLoadImage(fileName, CV_LOAD_IMAGE_COLOR);
 	if (NULL == colorImg) {
@@ -44,6 +48,6 @@ uint8_t * read_gray_image(const char *fileName, int *H, int *W) {
 	IplImage *grayImg = cvCreateImage(cvGetSize(colorImg), IPL_DEPTH_8U, 1);
 	cvCvtColor(colorImg, grayImg, CV_RGB2GRAY);
 	memcpy(data, grayImg->imageData, (colorImg->height*colorImg->width*sizeof(uint8_t)));
+#endif
 	return data;
 }
-#endif
