@@ -93,8 +93,10 @@ def dump_model(net_def_file, model_file):
     ip_b_ptr_arr = ip_b_ptr_arr + ip_b_ptrs[-1] + '};'
 
 
+    c_file = open(model_src_file, 'a')
     h_file = open(model_inc_file, 'a')
-    h_file.write(conv_w_ptr_arr + '\n' + conv_b_ptr_arr + '\n' + ip_w_ptr_arr + '\n' + ip_b_ptr_arr + '\n')
+    c_file.write(conv_w_ptr_arr + '\n' + conv_b_ptr_arr + '\n' + ip_w_ptr_arr + '\n' + ip_b_ptr_arr + '\n')
+    h_file.write('\nextern const float * conv_w_ptrs[];\nextern const float * conv_b_ptrs[];\nextern const float * ip_w_ptrs[];\nextern const float * ip_b_ptrs[];\n')
     h_file.write('#endif // _NETWORK_MODEL_H_')
     h_file.close()
 

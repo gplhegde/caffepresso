@@ -7,6 +7,10 @@ typedef struct {
 	int nInput;
 	// No of output neurons
 	int nOutput;
+	// No of fraction bits in weight and bias representation
+	int nKerFractionBits;
+	// No of fraction bits in activation representation
+	int nMapFractionBits;
 } IP_INFO_T;
 
 // Inner product layer context

@@ -5,8 +5,8 @@
 The variable names influence of majority of APIs in the C application
 Do not modify this file*/
 #define NO_DEEP_LAYERS 8
-#define INPUT_IMG_WIDTH 150
-#define INPUT_IMG_HEIGHT 150
+#define INPUT_IMG_WIDTH 28
+#define INPUT_IMG_HEIGHT 28
 #define NO_INPUT_MAPS 1
 
 /*Supported CNN layers*/

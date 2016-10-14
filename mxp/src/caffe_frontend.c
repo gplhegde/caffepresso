@@ -1,6 +1,8 @@
 #include "caffe_frontend.h"
 #include "cnn_layers.h"
 #include "debug_control.h"
+#include "network_model.h"
+
 #define CAFFE_FRONT_COMPLETE
 
 #ifdef CAFFE_FRONT_COMPLETE
@@ -14,6 +16,7 @@ CNN_LYR_NODE_T cnnLayerNodes[NO_DEEP_LAYERS];
 // a table whose entries are the structures.
 int get_opt_block_width(int mapW, int K, int N, int sp_size, int *opt_maps) {
 	int n, bw;
+	// TODO: Use MXP HW info structure to ge SP info.
 	printf("W = %d, K = %d, N = %d\n", mapW, K, N);
 	n = (sp_size - 2*mapW) /(2*mapW*K + 16*mapW);
 	bw = sp_size / (2*K*N + 16*N + 2);
@@ -24,7 +27,6 @@ int get_opt_block_width(int mapW, int K, int N, int sp_size, int *opt_maps) {
 }
 void caffe_layer_ctx_init() {
 	int lyr, mH, mW, nMaps;
-	
 	CONV_LYR_CTX_T *pConvCtx;
 	POOL_LYR_CTX_T *pPoolCtx;
 	ACT_LYR_CTX_T *pActCtx;
@@ -85,7 +87,9 @@ void caffe_layer_ctx_init() {
 				
 				pConvCtx->convInfo = (CONV_INFO_T){.mapH = mH,
 					.mapW = mW,
-					.K = cnn_param_table[lyr].K,			
+					.K = cnn_param_table[lyr].K,
+					.stride = cnn_param_table[lyr].stride,
+					.pad = cnn_param_table[lyr].pad,
 					.nInMaps = nMaps,
 					.nOutMaps = cnn_param_table[lyr].nOutMaps, .stride = cnn_param_table[lyr].stride, .pad = cnn_param_table[lyr].pad};
 				break;
@@ -127,34 +131,36 @@ void caffe_layer_ctx_init() {
 
 // Internal parameter initialization apart from caffe prototxt config parameters.
 void cnn_layer_internal_param_init(void) {
-	int lyr, conv_lyr;
+	int lyr, conv_lyr, ip_lyr;
 	CONV_LYR_CTX_T *pConvCtx;
 	POOL_LYR_CTX_T *pPoolCtx;
 	ACT_LYR_CTX_T *pActCtx;
 	IP_LYR_CTX_T * pIpCtx;
 	SMAX_LYR_CTX_T *pSmaxCtx;
-	int optMaps[5] = {48, 64, 192, 192, 256};
-	int optWidth[5] = {34, 27, 11, 9, 7};
 	conv_lyr = 0;
+	ip_lyr = 0;
 	for( lyr = 0; lyr < NO_DEEP_LAYERS; lyr++) {
 		switch(cnnLayerNodes[lyr].lyrType) {
 
 			case CONV:
 				pConvCtx = (CONV_LYR_CTX_T *)cnnLayerNodes[lyr].pLyrCtx;
+				// TODO: These should come from user after analyzing the dynamic range of the weights and activations after training.
 				pConvCtx->convInfo.nKerFractionBits = 11;
 				pConvCtx->convInfo.nMapFractionBits = 15;
+				// TODO: these modes should be part of some configuration file
 				pConvCtx->optType = SCALAR;
-				//pConvCtx->optType = VECTOR_MXP;
 				pConvCtx->lyrArithMode = FLOAT_POINT;
-				//pConvCtx->lyrArithMode = FIXED_POINT;
 				pConvCtx->mapLyt = MAP_ISOLATED;
-				// TODO:The block information should come from patch size optimizer.
+
+				// TODO:The optMaps and block width should come from patch size optimizer.
 				// Setting them to input map dimensions as of now.
-				REL_INFO("Layer : %d, Type : %d, opt = %d\n", lyr, cnnLayerNodes[lyr].lyrType, pConvCtx->optType);
 				pConvCtx->blkInfo = (BLK_INFO_T) {.blkH = pConvCtx->convInfo.mapH,
-					//.blkW = pConvCtx->convInfo.mapW,
-					.blkW = optWidth[conv_lyr],
-					.optMaps = optMaps[conv_lyr]};
+					.blkW = pConvCtx->convInfo.mapW,
+					.optMaps = pConvCtx->convInfo.nOutMaps};
+
+				// Pointer to conv weights and biases, taken from the big network model arrays.
+				pConvCtx->pFloatKer = conv_w_ptrs[conv_lyr];
+				pConvCtx->pFloatBias = conv_b_ptrs[conv_lyr];
 				conv_lyr++;
 				break;
 			case POOL:
@@ -164,12 +170,10 @@ void cnn_layer_internal_param_init(void) {
 				} else {
 					pPoolCtx->optType = VECTOR_MXP;
 				}
+				// TODO: these modes should be part of some configuration file
 				pPoolCtx->optType = SCALAR;
-				//pPoolCtx->optType = VECTOR_MXP;
 				pPoolCtx->lyrArithMode = FLOAT_POINT;
-				//pPoolCtx->lyrArithMode = FIXED_POINT;
 				pPoolCtx->mapLyt = MAP_ISOLATED;
-				REL_INFO("Layer : %d, Type : %d, opt = %d\n", lyr, cnnLayerNodes[lyr].lyrType, pPoolCtx->optType);
 				break;
 			case ACT:
 				pActCtx = (ACT_LYR_CTX_T *)cnnLayerNodes[lyr].pLyrCtx;
@@ -178,8 +182,17 @@ void cnn_layer_internal_param_init(void) {
 				break;
 			case INNER_PROD:
 				pIpCtx = (IP_LYR_CTX_T *)cnnLayerNodes[lyr].pLyrCtx;
+				// TODO: These should come from user after analyzing the dynamic range of the weights and activations after training.
+				pIpCtx->ipInfo.nKerFractionBits = 11;
+				pIpCtx->ipInfo.nMapFractionBits = 15;
+				// TODO: these modes should be part of some configuration file
 				pIpCtx->optType = SCALAR;
 				pIpCtx->lyrArithMode = FLOAT_POINT;
+
+				// Pointer to FC layer weights and biases, taken from the big network model arrays.
+				pIpCtx->pFloatWeight = ip_w_ptrs[ip_lyr];
+				pIpCtx->pFloatBias = ip_b_ptrs[ip_lyr];
+				ip_lyr++;
 				break;
 			case SOFTMAX:
 				pSmaxCtx = (SMAX_LYR_CTX_T *)cnnLayerNodes[lyr].pLyrCtx;

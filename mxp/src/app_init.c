@@ -10,8 +10,8 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 	// generate random kernel and convert them to fix point
 	for ( i = 0; i < pConvCtx->convInfo.nInMaps; i++) {
 		for (k = 0; k < pConvCtx->convInfo.nOutMaps; k++) {
-			generate_random_data(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
-				pConvCtx->convInfo.K * pConvCtx->convInfo.K, i*k+k);
+			//generate_random_data(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
+			//	pConvCtx->convInfo.K * pConvCtx->convInfo.K, i*k+k);
 			float_to_fix_data(pConvCtx->pFloatKer + (i * pConvCtx->convInfo.nOutMaps + k) * pConvCtx->convInfo.K * pConvCtx->convInfo.K,
 				pConvCtx->convInfo.K * pConvCtx->convInfo.K,
 				pConvCtx->convInfo.nKerFractionBits,
@@ -34,7 +34,7 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 	}
 
 	// Init bias of conv layer.
-	generate_random_data(pConvCtx->pFloatBias, pConvCtx->convInfo.nOutMaps, 123);
+	//generate_random_data(pConvCtx->pFloatBias, pConvCtx->convInfo.nOutMaps, 123);
 	float_to_fix_data(pConvCtx->pFloatBias,
 		pConvCtx->convInfo.nOutMaps,
 		pConvCtx->convInfo.nKerFractionBits,
@@ -43,8 +43,8 @@ APP_STATUS_E init_conv_kernels(CONV_LYR_CTX_T *pConvCtx) {
 }
 
 APP_STATUS_E init_ip_layer_params(IP_LYR_CTX_T *pIpCtx) {
-	generate_random_data(pIpCtx->pFloatWeight, pIpCtx->ipInfo.nOutput * pIpCtx->ipInfo.nInput, 1234);
-	generate_random_data(pIpCtx->pFloatBias, pIpCtx->ipInfo.nOutput, 4321);
+	//generate_random_data(pIpCtx->pFloatWeight, pIpCtx->ipInfo.nOutput * pIpCtx->ipInfo.nInput, 1234);
+	//generate_random_data(pIpCtx->pFloatBias, pIpCtx->ipInfo.nOutput, 4321);
 	
 	return SUCCESS;
 }
@@ -54,6 +54,8 @@ APP_STATUS_E caffe_cnn_layer_malloc(void *pLyrCtx, CNN_LAYER_TYPE_E lyrType) {
 	
 	// FIXME: Buffers for floating and pixed point mode are allocated. Need to allocate only 1 based on configuration
 	// Keeping both allocations for cross verification btw float and fixed point computations.
+	// FIXME: buffers for all layers are allocated separately for intermediate result verification. Need to allocate
+	// 2 buffers which are large enough to hold output of any layer and then use them for input and output maps in a ping pong buffer manner.
 	switch(lyrType) {
 		case CONV:
 		{
@@ -64,10 +66,10 @@ APP_STATUS_E caffe_cnn_layer_malloc(void *pLyrCtx, CNN_LAYER_TYPE_E lyrType) {
 			oH = (iH - pConvCtx->convInfo.K + 1 + pConvCtx->convInfo.stride - 1) / pConvCtx->convInfo.stride;
 			if ((NULL == (pConvCtx->pFloatOutput = (FL_MAP_PIXEL *)malloc(oH * oW * pConvCtx->convInfo.nOutMaps * sizeof(FL_MAP_PIXEL)))) ||
 				(NULL == (pConvCtx->pFixOutput = (FP_MAP_PIXEL *)malloc(oH * oW * pConvCtx->convInfo.nOutMaps * sizeof(FP_MAP_PIXEL)))) ||
-				(NULL == (pConvCtx->pFloatBias = (FL_KERNEL *)malloc(pConvCtx->convInfo.nOutMaps * sizeof (FL_KERNEL)))) ||
+				//(NULL == (pConvCtx->pFloatBias = (FL_KERNEL *)malloc(pConvCtx->convInfo.nOutMaps * sizeof (FL_KERNEL)))) ||
 				(NULL == (pConvCtx->pFixBias = (FP_KERNEL *)malloc(pConvCtx->convInfo.nOutMaps * sizeof (FP_KERNEL)))) ||
-				(NULL == (pConvCtx->pFloatKer = (FL_KERNEL *)malloc(pConvCtx->convInfo.nInMaps *
-				pConvCtx->convInfo.K * pConvCtx->convInfo.K * pConvCtx->convInfo.nOutMaps * sizeof (FL_KERNEL)))) ||
+				//(NULL == (pConvCtx->pFloatKer = (FL_KERNEL *)malloc(pConvCtx->convInfo.nInMaps *
+				//pConvCtx->convInfo.K * pConvCtx->convInfo.K * pConvCtx->convInfo.nOutMaps * sizeof (FL_KERNEL)))) ||
 				(NULL == (pConvCtx->pFixKer = (FP_KERNEL *)malloc(pConvCtx->convInfo.nInMaps *
 				pConvCtx->convInfo.K * pConvCtx->convInfo.K * pConvCtx->convInfo.nOutMaps * sizeof (FP_KERNEL))))) {
 				REL_INFO("Malloc failed\n");
@@ -124,11 +126,11 @@ APP_STATUS_E caffe_cnn_layer_malloc(void *pLyrCtx, CNN_LAYER_TYPE_E lyrType) {
 			IP_LYR_CTX_T *pIpCtx = (IP_LYR_CTX_T *)pLyrCtx;
 			if ((NULL == (pIpCtx->pFloatOutput = (FL_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput * sizeof(FL_MAP_PIXEL)))) ||
 				(NULL == (pIpCtx->pFixOutput = (FP_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput * sizeof(FP_MAP_PIXEL)))) ||
-				(NULL == (pIpCtx->pFloatWeight = (FL_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput *
-				pIpCtx->ipInfo.nInput * sizeof(FL_MAP_PIXEL)))) ||
+				//(NULL == (pIpCtx->pFloatWeight = (FL_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput *
+				//pIpCtx->ipInfo.nInput * sizeof(FL_MAP_PIXEL)))) ||
 				(NULL == (pIpCtx->pFixWeight = (FP_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput *
 				pIpCtx->ipInfo.nInput * sizeof(FP_MAP_PIXEL)))) ||
-				(NULL == (pIpCtx->pFloatBias = (FL_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput * sizeof(FL_MAP_PIXEL)))) ||
+				//(NULL == (pIpCtx->pFloatBias = (FL_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput * sizeof(FL_MAP_PIXEL)))) ||
 				(NULL == (pIpCtx->pFixBias = (FP_MAP_PIXEL *)malloc(pIpCtx->ipInfo.nOutput * sizeof(FP_MAP_PIXEL))))) {
 				REL_INFO("Malloc failed\n");
 				return MALLOC_FAIL;
@@ -161,9 +163,9 @@ APP_STATUS_E caffe_cnn_layer_mem_free(void *pLyrCtx, CNN_LAYER_TYPE_E lyrType) {
 			CONV_LYR_CTX_T *pConvCtx = (CONV_LYR_CTX_T *)pLyrCtx;
 			free(pConvCtx->pFloatOutput);
 			free(pConvCtx->pFixOutput);
-			free(pConvCtx->pFloatBias);
+			//free(pConvCtx->pFloatBias);
 			free(pConvCtx->pFixBias);
-			free(pConvCtx->pFloatKer);
+			//free(pConvCtx->pFloatKer);
 			free(pConvCtx->pFixKer);
 			if (pConvCtx->optType == VECTOR_MXP) {
 				for (k = 0; k < pConvCtx->convInfo.K * pConvCtx->convInfo.K * pConvCtx->convInfo.nInMaps; k++) {
@@ -187,9 +189,9 @@ APP_STATUS_E caffe_cnn_layer_mem_free(void *pLyrCtx, CNN_LAYER_TYPE_E lyrType) {
 			IP_LYR_CTX_T *pIpCtx = (IP_LYR_CTX_T *)pLyrCtx;
 			free(pIpCtx->pFloatOutput);
 			free(pIpCtx->pFixOutput);
-			free(pIpCtx->pFloatWeight);
+			//free(pIpCtx->pFloatWeight);
 			free(pIpCtx->pFixWeight);
-			free(pIpCtx->pFloatBias);
+			//free(pIpCtx->pFloatBias);
 			free(pIpCtx->pFixBias);
 			break;
 		}

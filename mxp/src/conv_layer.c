@@ -510,6 +510,7 @@ APP_STATUS_E mxp_conv_layer(CONV_LYR_CTX_T *pConvCtx, FP_MAP_PIXEL *pInMaps, MAP
 	for(imap = 0; imap < pConvCtx->convInfo.nInMaps; imap++) {
 		W = pConvCtx->blkInfo.blkW;
 		col = 0;
+		// FIXME: Need another loop here over chunks of optMaps if optMaps != nOutMaps
 		while(col < (oW - pConvCtx->convInfo.K + 1)) {
 			// Last block will have width less than or equal to the original block width.
 			if ( col + W >= iW) {
