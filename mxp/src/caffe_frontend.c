@@ -17,6 +17,7 @@ CNN_LYR_NODE_T cnnLayerNodes[NO_DEEP_LAYERS];
 int get_opt_block_width(int mapW, int K, int N, int sp_size, int *opt_maps) {
 	int n, bw;
 	// TODO: Use MXP HW info structure to ge SP info.
+	// vbx_mxp_t *this_mxp = VBX_GET_THIS_MXP();
 	printf("W = %d, K = %d, N = %d\n", mapW, K, N);
 	n = (sp_size - 2*mapW) /(2*mapW*K + 16*mapW);
 	bw = sp_size / (2*K*N + 16*N + 2);

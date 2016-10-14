@@ -1,4 +1,6 @@
 *.lic
+*.swp
+*.bak
 *.pyc
 *.o
 *.log
