@@ -116,7 +116,7 @@ APP_STATUS_E vector_fix_ip_layer(IP_LYR_CTX_T *pIpCtx, FP_MAP_PIXEL *pFixInput) 
 	APP_STATUS_E status;
 	status = mxp_mtx_vec_mult(pIpCtx->pFixWeight, pFixInput, pIpCtx->pFixBias,
 		pIpCtx->ipInfo.nOutput, pIpCtx->ipInfo.nInput,
-		pIpCtx->ipInfo.nMapFractionBits, pIpCtx->pFixOutput);
+		pIpCtx->ipInfo.nKerFractionBits, pIpCtx->pFixOutput);
 
 	return status;
 }

@@ -80,12 +80,13 @@ TEST_STATUS_E test_ip_layer() {
 
 	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
 	ipCtx.lyrArithMode = FIXED_POINT; 
-	//ipCtx.optType = VECTOR_MXP;
+	ipCtx.optType = VECTOR_MXP;
 	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
 
-	print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
+	//print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
 
 	compute_ip_ref(&ipCtx, pFltInput);
+	printf("Reference feature map\n");
 	print_float_img(pRefFltOutput, 1, noOutputs);
 
 	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
@@ -93,6 +94,7 @@ TEST_STATUS_E test_ip_layer() {
 	check_cmp_status(&status);
 
 	fix16_to_float_data(ipCtx.pFixOutput, noOutputs, nMapFracBits, ipCtx.pFloatOutput);
+    printf("Fixed point output map\n");
 	print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
 	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
 	check_cmp_status(&status);

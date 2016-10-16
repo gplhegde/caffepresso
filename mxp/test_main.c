@@ -7,7 +7,7 @@ int test_layers();
 void mxp_init();
 
 int main(void) {
-	//mxp_init();
+	mxp_init();
 	test_layers();
 	printf("Application complete\n");
 	return 0;
@@ -16,27 +16,28 @@ int main(void) {
 
 int test_layers() {
 	TEST_STATUS_E status;
-
+#if 0
 	status = test_pool_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Pool layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-
+#endif
 	status = test_conv_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Conv layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-
+#if 0
 	status = test_ip_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Inner product layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
+#endif
 	return status;
 }
 

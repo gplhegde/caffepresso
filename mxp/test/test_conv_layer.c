@@ -87,6 +87,9 @@ TEST_STATUS_E test_conv_layer() {
 	convCtx.mapLyt = MAP_ISOLATED;
 	convCtx.lyrArithMode = FLOAT_POINT; 
 	convCtx.optType = SCALAR;
+	convCtx.blkInfo.blkH = convCtx.convInfo.mapH;
+	convCtx.blkInfo.blkW = convCtx.convInfo.mapW;
+	convCtx.blkInfo.optMaps = convCtx.convInfo.nOutMaps;
 
 	// input and output buffer allocation	
 	convCtx.pFloatOutput = malloc(outHeight * outWidth * noOutputs * sizeof(FL_MAP_PIXEL));
@@ -113,7 +116,7 @@ TEST_STATUS_E test_conv_layer() {
 
 	cnn_conv_layer(&convCtx, pFltInput, pFixInput, MAP_ISOLATED);
 	convCtx.lyrArithMode = FIXED_POINT; 
-	//convCtx.optType = VECTOR_MXP;
+	convCtx.optType = VECTOR_MXP;
 	cnn_conv_layer(&convCtx, pFltInput, pFixInput, MAP_ISOLATED);
 
 	print_float_img(convCtx.pFloatOutput, outHeight, outWidth);
