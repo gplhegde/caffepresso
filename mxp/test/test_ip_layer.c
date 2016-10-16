@@ -41,16 +41,15 @@ TEST_STATUS_E test_ip_layer() {
 	int nMapFracBits, nKerFracBits;
 	FL_MAP_PIXEL *pFltInput;
 	FP_MAP_PIXEL *pFixInput;
-	
 	CMP_STATUS_T status;
 
 	IP_LYR_CTX_T ipCtx;
 
 	printf("Testing Inner product Layer\n");
-	noInputs = 16;
-	noOutputs = 32;
-	nMapFracBits = 13;
-	nKerFracBits = 13;
+	noInputs = 64;
+	noOutputs = 160;
+	nMapFracBits = 11;
+	nKerFracBits = 11;
 
 	ipCtx.ipInfo = (IP_INFO_T){noInputs, noOutputs, nKerFracBits, nMapFracBits};
 	ipCtx.lyrArithMode = FLOAT_POINT; 
@@ -76,26 +75,34 @@ TEST_STATUS_E test_ip_layer() {
 	float_to_fix_data(pFltInput, noInputs, nMapFracBits, pFixInput);
 	float_to_fix_data(ipCtx.pFloatWeight, noInputs * noOutputs, nKerFracBits, ipCtx.pFixWeight);
 	float_to_fix_data(ipCtx.pFloatBias, noOutputs, nMapFracBits, ipCtx.pFixBias);
-
-
 	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
+
 	ipCtx.lyrArithMode = FIXED_POINT; 
-	ipCtx.optType = VECTOR_MXP;
 	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
 
 	//print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
 
 	compute_ip_ref(&ipCtx, pFltInput);
 	printf("Reference feature map\n");
-	print_float_img(pRefFltOutput, 1, noOutputs);
+	//print_float_img(pRefFltOutput, 1, noOutputs);
 
 	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
 	printf("Comparing floating point output\n");
 	check_cmp_status(&status);
 
 	fix16_to_float_data(ipCtx.pFixOutput, noOutputs, nMapFracBits, ipCtx.pFloatOutput);
-    printf("Fixed point output map\n");
-	print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
+    printf("Fixed point output map: scalar version\n");
+	//print_float_img(ipCtx.pFloatOutput, 1, noOutputs);
+	print_fix_img(ipCtx.pFixOutput, 1, noOutputs);
+	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
+	check_cmp_status(&status);
+
+	// compute in MXP vector mode
+	ipCtx.optType = VECTOR_MXP;
+	inner_prod_layer(&ipCtx, pFltInput, pFixInput);
+    printf("Fixed point output map: vector version\n");
+	print_fix_img(ipCtx.pFixOutput, 1, noOutputs);
+	fix16_to_float_data(ipCtx.pFixOutput, noOutputs, nMapFracBits, ipCtx.pFloatOutput);
 	status = compare_ip_out(&ipCtx, ipCtx.pFloatOutput);
 	check_cmp_status(&status);
 

@@ -1,5 +1,6 @@
 #include "inner_prod_layer.h"
 #include "debug_control.h"
+#include "misc_utils.h"
 #include "vbx.h"
 #include "vbx_port.h"
 
@@ -30,7 +31,7 @@ static inline float fix16_dot_prod(FP_MAP_PIXEL *pInput , FP_KERNEL *pWeight, in
     for (e = 0; e < len; e++) {
         sop += pInput[e] * pWeight[e];
     }
-
+	// TODO:hanfle to overflow
     return (FP_MAP_PIXEL)(sop >> shift);
 }
 
@@ -70,10 +71,12 @@ APP_STATUS_E mxp_mtx_vec_mult(FP_KERNEL *pWeight, FP_MAP_PIXEL *pAct, FP_KERNEL 
 	// TODO: Use matrix mult API from MXP software development kit for more efficiency
 	FP_KERNEL *spBias, *spWeightPing, *spWeightPong, *spTemp;
 	FP_MAP_PIXEL *spAct, *spOut;
-	int32_t *spAcc;
+	int32_t *spAcc, *spExt1, *spExt2;
 	int out;
 	if((NULL == (spBias = vbx_sp_malloc(nRows * sizeof(FP_KERNEL)))) ||
 		(NULL == (spAct = vbx_sp_malloc(nCols * sizeof(FP_MAP_PIXEL)))) ||
+		(NULL == (spExt1 = vbx_sp_malloc(nCols * sizeof(int32_t)))) ||
+		(NULL == (spExt2 = vbx_sp_malloc(nCols * sizeof(int32_t)))) ||
 		(NULL == (spAcc = vbx_sp_malloc(nRows * sizeof(int32_t)))) ||
 		(NULL == (spOut = vbx_sp_malloc(nRows * sizeof(FP_MAP_PIXEL)))) ||
 		(NULL == (spWeightPing = vbx_sp_malloc(nRows * sizeof(FP_KERNEL)))) ||
@@ -82,12 +85,17 @@ APP_STATUS_E mxp_mtx_vec_mult(FP_KERNEL *pWeight, FP_MAP_PIXEL *pAct, FP_KERNEL 
 		return SP_MALLOC_FAIL;
 	}
 	vbx_dcache_flush_all();
+	// reset the accumulator
+	vbx_set_vl(nRows);
+	vbx(SVW, VMUL, spAcc, 0, spAcc);
+
 	vbx_set_vl(nCols);
 
 	vbx_dma_to_vector(spWeightPing, pWeight, nCols * sizeof(FP_KERNEL));
 	vbx_dma_to_vector(spBias, pBias, nRows * sizeof(FP_KERNEL));
 	vbx_dma_to_vector(spAct, pAct, nCols * sizeof(FP_MAP_PIXEL));
-	
+
+	vbx(VVHW, VMOV, spExt1, spAct, 0);
 	for(out = 0; out < nRows; out++) {
 		// double buffering the weight matrix, one row at a time
 		if(out < nRows - 1) {
@@ -95,18 +103,25 @@ APP_STATUS_E mxp_mtx_vec_mult(FP_KERNEL *pWeight, FP_MAP_PIXEL *pAct, FP_KERNEL 
 		}
 		
 		// dot product
-		vbx_acc(VVHW, VMUL, spAcc + out, spWeightPing, spAct);
+		// FIXME: vbx_acc is not working as expected. Even if the output type is W, the sum of prod is restricted to 16b
+		// Contact VectorBlox to get clarification on this behavior
+
+		// TEMPFIX: Use extra buffer to sign extend both input and weights to 32b and then do 32b x 32b + 32b ==> 32b dot prod
+		vbx(VVHW, VMOV, spExt2, spWeightPing, 0);
+		//vbx_acc(VVHW, VMUL, spAcc + out, spWeightPing, spAct);
+		vbx_acc(VVWW, VMUL, spAcc + out, spExt2, spExt1);
 		spTemp = spWeightPing;
 		spWeightPing = spWeightPong;
 		spWeightPong = spTemp;
 	}
 	// convert to 16bit and add bias
 	vbx_set_vl(nRows);
+	// TODO:hanfle to overflow
 	vbx(SVWH, VSHR, spOut, shift, spAcc);
 	vbx(VVHH, VADD, spOut, spBias, spOut);
 
 	// send to host memory
-	vbx_dma_to_host(pOut, spOut, nCols * sizeof(FP_MAP_PIXEL));
+	vbx_dma_to_host(pOut, spOut, nRows * sizeof(FP_MAP_PIXEL));
 	vbx_sync();
 	vbx_sp_free();
 	return SUCCESS;
@@ -114,6 +129,7 @@ APP_STATUS_E mxp_mtx_vec_mult(FP_KERNEL *pWeight, FP_MAP_PIXEL *pAct, FP_KERNEL 
 
 APP_STATUS_E vector_fix_ip_layer(IP_LYR_CTX_T *pIpCtx, FP_MAP_PIXEL *pFixInput) {
 	APP_STATUS_E status;
+
 	status = mxp_mtx_vec_mult(pIpCtx->pFixWeight, pFixInput, pIpCtx->pFixBias,
 		pIpCtx->ipInfo.nOutput, pIpCtx->ipInfo.nInput,
 		pIpCtx->ipInfo.nKerFractionBits, pIpCtx->pFixOutput);

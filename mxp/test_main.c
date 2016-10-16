@@ -24,13 +24,15 @@ int test_layers() {
 		return -1;
 	}
 #endif
+#if 0
 	status = test_conv_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Conv layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-#if 0
+#endif
+#if 1
 	status = test_ip_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Inner product layer test failed\nError = %d\n", status);
