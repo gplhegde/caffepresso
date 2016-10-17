@@ -214,6 +214,7 @@ APP_STATUS_E scalar_fix_conv2D(FP_MAP_PIXEL *pInMap, FP_KERNEL *pKer, CONV_INFO_
 				}
 			}
 			sop = sop >> pConvInfo->nKerFractionBits;
+			// TODO: check for overflow and do saturation
 			pOutMap[row/pConvInfo->stride * oW + col/pConvInfo->stride] = (FP_MAP_PIXEL)sop;
 		}
 	}
@@ -260,9 +261,15 @@ APP_STATUS_E scalar_fix_conv_layer(FP_MAP_PIXEL *pInMaps, FP_KERNEL *pKer, FP_KE
 				pAccMap[pixel] += pTempMap[pixel];
 			}
 		}
-		// Scale and store 
 		for(pixel = 0; pixel < oH * oW; pixel++) {
 			//TODO: make sure that the bias is in correct Q format before adding.
+
+			// FIXME: overflow can still occur after adding the bias
+			// It is better to do the range analysis during network training time and decide
+			// fixed point format based on that
+			if(pAccMap[pixel] > 32767 || pAccMap[pixel] < -32768) {
+				printf("Overflow\n");
+			}
 			pOutMaps[omap * oW * oH + pixel] = (FP_MAP_PIXEL)(pAccMap[pixel] + pBias[omap]);
 		}
 	}
@@ -476,6 +483,7 @@ APP_STATUS_E mxp_conv_layer(CONV_LYR_CTX_T *pConvCtx, FP_MAP_PIXEL *pInMaps, MAP
 	CONV_INFO_T blkConvInfo;
 	int32_t *pMapAcc;
 
+	REL_ASSERT(pConvCtx->convInfo.stride == 1);
 	// Block height and width are smaller than map heiht and width. Other parameters are same as that of conv layer info.
 	memcpy(&blkConvInfo, &pConvCtx->convInfo, sizeof(CONV_INFO_T));
 	blkConvInfo.mapH = pConvCtx->blkInfo.blkH;
@@ -547,6 +555,7 @@ APP_STATUS_E mxp_conv_layer(CONV_LYR_CTX_T *pConvCtx, FP_MAP_PIXEL *pInMaps, MAP
 	// add bias
 	for(omap = 0; omap < pConvCtx->convInfo.nOutMaps; omap++) {
 		for (pixel = 0; pixel < oH * oW; pixel++) {
+			// TODO:check for overflow
 			pConvCtx->pFixOutput[omap * oW * oH + pixel] = (FP_MAP_PIXEL)(pMapAcc[omap * oW * oH + pixel] + pConvCtx->pFixBias[omap]);
 		}
 	}

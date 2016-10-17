@@ -48,6 +48,7 @@ CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *pCtx, FL_MAP_PIXEL *pOutput) {
 		for(int row = 0; row < oH; row++) {
 			for(int col = 0; col < oW; col++) {
 				if(fabs(pOutput[(map*oH + row)*oW + col] - pConvRefFltOutput[(map*oH + row)*oW + col]) > ERR_THRESHOLD) {
+					printf("Ref:%f\tAct:%f\n", pConvRefFltOutput[(map*oH + row)*oW + col], pOutput[(map*oH + row)*oW + col]);
 					status.misMap = map;
 					status.misRow = row;
 					status.misCol = col;
@@ -61,8 +62,8 @@ CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *pCtx, FL_MAP_PIXEL *pOutput) {
 }
 
 TEST_STATUS_E test_conv_layer() {
-	int noInputs, noOutputs, inputHeight, inputWidth, K, stride, pad;
-	int outWidth, outHeight, nMapFracBits, nKerFracBits;
+	int noInputs, noOutputs, inputHeight, inputWidth, K, stride, pad, k, i;
+	int outWidth, outHeight, nMapFracBits, nKerFracBits, map, coeff;
 	FL_MAP_PIXEL *pFltInput;
 	FP_MAP_PIXEL *pFixInput;
 	
@@ -72,14 +73,14 @@ TEST_STATUS_E test_conv_layer() {
 
 	printf("Testing CONV Layer\n");
 	noInputs = 3;
-	noOutputs = 2;
-	inputHeight = 8;
-	inputWidth = 8;
+	noOutputs = 10;
+	inputHeight = 9;
+	inputWidth = 9;
 	K = 3;
-	stride = 2;
+	stride = 1;
 	pad = 0;
-	nMapFracBits = 13;
-	nKerFracBits = 13;
+	nMapFracBits = 12;
+	nKerFracBits = 12;
 
 	outHeight = (inputHeight + 2*pad - K + 1 + stride - 1)/ stride;
 	outWidth = (inputWidth + 2*pad - K + 1 + stride - 1)/ stride;
@@ -98,6 +99,11 @@ TEST_STATUS_E test_conv_layer() {
 	convCtx.pFixKer = malloc(K * K * noInputs * noOutputs * sizeof(FP_KERNEL));
 	convCtx.pFloatBias = malloc(noOutputs *sizeof(FL_KERNEL));
 	convCtx.pFixBias = malloc(noOutputs *sizeof(FP_KERNEL));
+	// for kernel extension
+	convCtx.ppExtKer = malloc(K * K * noInputs * sizeof(FP_KERNEL *));
+	for( k = 0; k < convCtx.convInfo.K * convCtx.convInfo.K * convCtx.convInfo.nInMaps; k++) {
+		convCtx.ppExtKer[k] = (FP_KERNEL *)malloc(convCtx.convInfo.nOutMaps * convCtx.blkInfo.blkW * sizeof(FP_KERNEL));
+	}
 
 	pConvRefFltOutput = malloc(outHeight * outWidth * noOutputs * sizeof(FL_MAP_PIXEL));
 	pFltInput = malloc((inputHeight + 2*pad)*(inputWidth + 2*pad) * noInputs * sizeof(FL_MAP_PIXEL));
@@ -111,21 +117,42 @@ TEST_STATUS_E test_conv_layer() {
 	float_to_fix_data(pFltInput, (inputHeight + 2*pad)*(inputWidth + 2*pad) * noInputs, nMapFracBits, pFixInput);
 	float_to_fix_data(convCtx.pFloatKer, K * K * noInputs * noOutputs, nKerFracBits, convCtx.pFixKer);
 	float_to_fix_data(convCtx.pFloatBias, noOutputs, nMapFracBits, convCtx.pFixBias);
-
-	print_float_img(pFltInput, inputHeight, inputWidth);
+	// kernel extension for MXP mode
+	for(i = 0; i < convCtx.convInfo.nInMaps; i++) {
+		for(k = 0; k < convCtx.convInfo.K * convCtx.convInfo.K; k++) {
+			for(map = 0; map < convCtx.convInfo.nOutMaps; map++) {
+				// Repeate the coefficient image width no of times
+				for(coeff = 0; coeff < convCtx.blkInfo.blkW; coeff++) {
+					*(convCtx.ppExtKer[i * convCtx.convInfo.K * convCtx.convInfo.K + k] + convCtx.blkInfo.blkW * map + coeff) =
+						//convCtx.pFixKer[(i * convCtx.convInfo.nOutMaps + map) * convCtx.convInfo.K * convCtx.convInfo.K + k];
+						convCtx.pFixKer[(map * convCtx.convInfo.nInMaps + i) * convCtx.convInfo.K * convCtx.convInfo.K + k];
+				}
+			}
+		}
+	}
+	//print_float_img(pFltInput, inputHeight, inputWidth);
 
 	cnn_conv_layer(&convCtx, pFltInput, pFixInput, MAP_ISOLATED);
 	convCtx.lyrArithMode = FIXED_POINT; 
-	convCtx.optType = VECTOR_MXP;
 	cnn_conv_layer(&convCtx, pFltInput, pFixInput, MAP_ISOLATED);
 
+	//print_fix_img(convCtx.pFixOutput, outHeight, outWidth);
 	print_float_img(convCtx.pFloatOutput, outHeight, outWidth);
 
 	compute_conv_ref(&convCtx, pFltInput);
-	print_float_img(pConvRefFltOutput, outHeight, outWidth);
+	//print_float_img(pConvRefFltOutput, outHeight, outWidth);
 
 	status = compare_conv_out(&convCtx, convCtx.pFloatOutput);
 	check_cmp_status(&status);
+
+	fix16_to_float_data(convCtx.pFixOutput, outHeight * outWidth * noOutputs, nMapFracBits, convCtx.pFloatOutput);
+	status = compare_conv_out(&convCtx, convCtx.pFloatOutput);
+	print_float_img(convCtx.pFloatOutput, outHeight, outWidth);
+	check_cmp_status(&status);
+
+	convCtx.optType = VECTOR_MXP;
+	cnn_conv_layer(&convCtx, pFltInput, pFixInput, MAP_ISOLATED);
+	//print_fix_img(convCtx.pFixOutput, outHeight, outWidth);
 
 	fix16_to_float_data(convCtx.pFixOutput, outHeight * outWidth * noOutputs, nMapFracBits, convCtx.pFloatOutput);
 	print_float_img(convCtx.pFloatOutput, outHeight, outWidth);
@@ -139,6 +166,10 @@ TEST_STATUS_E test_conv_layer() {
 	free(convCtx.pFloatBias);
 	free(convCtx.pFixBias);
 
+	for(k = 0; k < convCtx.convInfo.K * convCtx.convInfo.K * convCtx.convInfo.nInMaps; k++) {
+		free(convCtx.ppExtKer[k]);
+	}
+	free(convCtx.ppExtKer);
 	free(pConvRefFltOutput);
 	free(pFixInput);
 	free(pFltInput);

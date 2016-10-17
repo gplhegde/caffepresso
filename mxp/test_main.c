@@ -16,30 +16,27 @@ int main(void) {
 
 int test_layers() {
 	TEST_STATUS_E status;
-#if 1
+	printf("--------Testing POOL Layer-------\n");
 	status = test_pool_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Pool layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-#endif
-#if 0
+	printf("--------Testing CONV Layer-------\n");
 	status = test_conv_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Conv layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-#endif
-#if 0
+	printf("--------Testing FC Layer-------\n");
 	status = test_ip_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Inner product layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-#endif
 	return status;
 }
 
