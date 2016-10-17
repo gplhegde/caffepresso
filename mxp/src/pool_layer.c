@@ -22,7 +22,7 @@ APP_STATUS_E vector_fix_pool_layer(FP_MAP_PIXEL *pInMaps, POOL_INFO_T *pPoolInfo
 	REL_ASSERT((pPoolInfo->stride == 2) && (pPoolInfo->winSize = 2));
 	oH = (pPoolInfo->mapH + 2*pPoolInfo->pad - pPoolInfo->winSize + 1 + pPoolInfo->stride - 1)/ pPoolInfo->stride;
 	oW = (pPoolInfo->mapW + 2*pPoolInfo->pad - pPoolInfo->winSize + 1 + pPoolInfo->stride - 1)/ pPoolInfo->stride;
-
+	
 	maxVlen = (64*1024) / 3;	//TODO: Compute max vector length using available SP and buffer requirement
 	vbx_dcache_flush_all();
 
@@ -49,7 +49,7 @@ APP_STATUS_E vector_fix_pool_layer(FP_MAP_PIXEL *pInMaps, POOL_INFO_T *pPoolInfo
 
 					vbx_set_vl(vl);
 					for (map = 0; map < pPoolInfo->nMaps; map++) {
-						for (row = 0; row < iH; row += 2) {
+						for (row = 0; row < (iH-1); row += 2) {
 							// DMA 2 map rows
 							vbx_dma_to_vector(spRowEven, pInMaps + map * iW * iH + row * iW, iW * sizeof(FP_MAP_PIXEL));
 							vbx_dma_to_vector(spRowOdd, pInMaps + map * iW * iH + (row+1) * iW, iW * sizeof(FP_MAP_PIXEL));
@@ -87,7 +87,7 @@ APP_STATUS_E vector_fix_pool_layer(FP_MAP_PIXEL *pInMaps, POOL_INFO_T *pPoolInfo
 					}
 
 					vbx_set_vl(vl);
-					for (row = 0; row < iH; row += 2) {
+					for (row = 0; row < (iH-1); row += 2) {
 						// DMA 2 rows of concatenated map to SP
 						vbx_dma_to_vector(spRowEven, pInMaps + row * iW * pPoolInfo->nMaps, 
 							iW * pPoolInfo->nMaps * sizeof(FP_MAP_PIXEL));

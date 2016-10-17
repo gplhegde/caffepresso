@@ -16,7 +16,7 @@ int main(void) {
 
 int test_layers() {
 	TEST_STATUS_E status;
-#if 0
+#if 1
 	status = test_pool_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Pool layer test failed\nError = %d\n", status);
@@ -32,7 +32,7 @@ int test_layers() {
 		return -1;
 	}
 #endif
-#if 1
+#if 0
 	status = test_ip_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Inner product layer test failed\nError = %d\n", status);

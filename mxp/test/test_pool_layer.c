@@ -26,6 +26,7 @@ void compute_pool_ref(POOL_LYR_CTX_T *pCtx, FL_MAP_PIXEL *pFloatInput) {
 						maxFltVal = MAX(maxFltVal , pFloatInput[(map*iH + r)*iW + c]);
 					}
 				}
+				// TODO: case for AVG pool
 				pRefFltOutput[(map*oH + row)*oW + col] = maxFltVal;
 			}
 		}
@@ -71,8 +72,8 @@ TEST_STATUS_E test_pool_layer() {
 
 	printf("Testing POOL Layer\n");
 	noInputs = 3;
-	inputHeight = 16;
-	inputWidth = 16;
+	inputHeight = 17;
+	inputWidth = 17;
 	winSize = 2;
 	stride = 2;
 	pad = 0;
@@ -97,21 +98,29 @@ TEST_STATUS_E test_pool_layer() {
 	generate_random_data(pFltInput, (inputHeight + 2*pad)*(inputWidth + 2*pad) * noInputs, 123);
 	float_to_fix_data(pFltInput, (inputHeight + 2*pad)*(inputWidth + 2*pad) * noInputs, 15, pFixInput);
 
-	//print_float_img(pFltInput, inputHeight, inputWidth);
-
+	// compute floating point output
 	cnn_pool_layer(&poolCtx, pFltInput, pFixInput, MAP_ISOLATED);
+	// compute fixed point scalar output
 	poolCtx.lyrArithMode = FIXED_POINT; 
-	//poolCtx.optType = VECTOR_MXP;
 	cnn_pool_layer(&poolCtx, pFltInput, pFixInput, MAP_ISOLATED);
 
 	//print_float_img(poolCtx.pFloatOutput, outHeight, outWidth);
 
+	// compute reference output from the pooling function defined in this file
 	compute_pool_ref(&poolCtx, pFltInput);
 	//print_float_img(pRefFltOutput, outHeight, outWidth);
 
 	status = compare_pool_out(&poolCtx, poolCtx.pFloatOutput);
 	check_cmp_status(&status);
 
+	fix16_to_float_data(poolCtx.pFixOutput, outHeight * outWidth * noInputs, 15, poolCtx.pFloatOutput);
+	//print_float_img(poolCtx.pFloatOutput, outHeight, outWidth);
+	status = compare_pool_out(&poolCtx, poolCtx.pFloatOutput);
+	check_cmp_status(&status);
+
+	// test the MXP version of pool
+	poolCtx.optType = VECTOR_MXP;
+	cnn_pool_layer(&poolCtx, pFltInput, pFixInput, MAP_ISOLATED);
 	fix16_to_float_data(poolCtx.pFixOutput, outHeight * outWidth * noInputs, 15, poolCtx.pFloatOutput);
 	//print_float_img(poolCtx.pFloatOutput, outHeight, outWidth);
 	status = compare_pool_out(&poolCtx, poolCtx.pFloatOutput);
