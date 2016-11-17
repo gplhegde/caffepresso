@@ -15,44 +15,55 @@
 
 MEMORY
 {
-    LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00080000   /* 512kB LOCAL L2/SRAM */
-    LOCAL_L1P_SRAM: o = 0x00E00000 l = 0x00008000   /* 32kB LOCAL L1P/SRAM */
-    LOCAL_L1D_SRAM: o = 0x00F00000 l = 0x00008000   /* 32kB LOCAL L1D/SRAM */
-    SHRAM:          o = 0x0C000000 l = 0x00400000   /* 4MB Multicore shared Memmory */
-    
-    EMIF16_CS2:     o = 0x70000000 l = 0x04000000   /* 64MB EMIF16 CS2 Data Memory */
-    EMIF16_CS3:     o = 0x74000000 l = 0x04000000   /* 64MB EMIF16 CS3 Data Memory */
-    EMIF16_CS4:     o = 0x78000000 l = 0x04000000   /* 64MB EMIF16 CS4 Data Memory */
-    EMIF16_CS5:     o = 0x7C000000 l = 0x04000000   /* 64MB EMIF16 CS5 Data Memory */
-  
+
+#ifndef __KEYSTONE1
+    LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00100000   /* 1MB LOCAL L2/SRAM */
+    SHRAM:          o = 0x0C000000 l = 0x00600000   /* 6MB Multicore shared Memmory */
     DDR3:           o = 0x80000000 l = 0x80000000   /* 2GB CE0 and CE1 external DDR3 SDRAM */
+#else
+    LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00080000   /* 512KB LOCAL L2/SRAM */
+    SHRAM:          o = 0x0C000000 l = 0x00400000   /* 4MB Multicore shared Memmory */
+    DDR3:           o = 0x80000000 l = 0x20000000   /* 512MB DDR3 SDRAM */
+#endif
 }
  
 SECTIONS
 {
-    .text          >  SHRAM
-    .stack         >  SHRAM
-    .bss           >  SHRAM
-    .cio           >  SHRAM
-    .const         >  SHRAM
-    .data          >  SHRAM
-    .switch        >  SHRAM
-    .sysmem        >  SHRAM
-    .far           >  SHRAM
-    .args          >  SHRAM
-    .ppinfo        >  SHRAM
-    .ppdata        >  SHRAM
-  
-    /* COFF sections */
-    .pinit         >  SHRAM
-    .cinit         >  SHRAM
+    .kernel: {
+       *.obj (.text:optimized) { SIZE(_kernel_size) }
+    } load > LOCAL_L2_SRAM
+
+    .text: load >> LOCAL_L2_SRAM
+    .text:touch: load >> LOCAL_L2_SRAM
+
+    GROUP (NEAR_DP)
+    {
+    .neardata
+    .rodata
+    .bss
+    } load > LOCAL_L2_SRAM
+
+    .far: load >> LOCAL_L2_SRAM
+    .fardata: load >> LOCAL_L2_SRAM
+    .data: load >> LOCAL_L2_SRAM
+    .switch: load >> LOCAL_L2_SRAM
+    .stack: load > LOCAL_L2_SRAM
+    .args: load > LOCAL_L2_SRAM align = 0x4, fill = 0 {_argsize = 0x200; }
+    .sysmem: load > LOCAL_L2_SRAM
+    .cinit: load > LOCAL_L2_SRAM
+    .const: load > LOCAL_L2_SRAM START(const_start) SIZE(const_size)
+    .pinit: load > LOCAL_L2_SRAM
+    .cio: load >> LOCAL_L2_SRAM
+
+    .ppinfo        >  LOCAL_L2_SRAM
+    .ppdata        >  LOCAL_L2_SRAM
   
     /* EABI sections */
-    .binit         >  SHRAM
-    .init_array    >  SHRAM
-    .neardata      >  SHRAM
-    .fardata       >  SHRAM
-    .rodata        >  SHRAM
-    .c6xabi.exidx  >  SHRAM
-    .c6xabi.extab  >  SHRAM
+    .binit         >  LOCAL_L2_SRAM
+    .init_array    >  LOCAL_L2_SRAM
+    .c6xabi.exidx  >  LOCAL_L2_SRAM
+    .c6xabi.extab  >  LOCAL_L2_SRAM
+
+    .local_ram	   >  LOCAL_L2_SRAM
+    .sharedram	   >  DDR3
 }

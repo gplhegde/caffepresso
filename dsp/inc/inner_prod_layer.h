@@ -37,12 +37,5 @@ typedef struct {
 	IP_INFO_T ip_info;
 } IP_LYR_CTX_T;
 
-STATUS_E dsp_ip_layer(FIX_MAP *p_input,	// pointer to input features
-	FIX_KER *p_weight,	// pointer to weight matrix stored in [no_outputs][no_inputs] manner
-	FIX_KER *p_bias,	// pointer to bias units
-	int no_inputs,		// number of input units to this layer
-	int no_outputs,		// number of output units
-	int shift,			// shift used to convert the dot product to 16b. Perform conversion before adding bias
-	FIX_MAP *p_output	// pointer to output features.
-	);
+STATUS_E dsp_ip_layer(IP_LYR_CTX_T *p_ip_ctx, FLT_MAP *p_flt_input, FIX_MAP *p_fix_input);
 #endif // _INNER_PROD_LAYER_H
