@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<configurations XML_version="1.2" id="configurations_0">
+<configuration XML_version="1.2" id="Texas Instruments XDS2xx USB Debug Probe_0">
+        <instance XML_version="1.2" desc="Texas Instruments XDS2xx USB Debug Probe_0" href="connections/TIXDS2XXUSB_Connection.xml" id="Texas Instruments XDS2xx USB Debug Probe_0" xml="TIXDS2XXUSB_Connection.xml" xmlpath="connections"/>
+        <connection XML_version="1.2" id="Texas Instruments XDS2xx USB Debug Probe_0">
+            <instance XML_version="1.2" href="drivers/tixds560icepick_d.xml" id="drivers" xml="tixds560icepick_d.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560c66xx.xml" id="drivers" xml="tixds560c66xx.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560cs_dap.xml" id="drivers" xml="tixds560cs_dap.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560cortexA15.xml" id="drivers" xml="tixds560cortexA15.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560csstm.xml" id="drivers" xml="tixds560csstm.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560etbcs.xml" id="drivers" xml="tixds560etbcs.xml" xmlpath="drivers"/>
+            <platform XML_version="1.2" id="platform_0">
+                <instance XML_version="1.2" desc="66AK2H12_0" href="devices/66AK2H12.xml" id="66AK2H12_0" xml="66AK2H12.xml" xmlpath="devices"/>
+            <device HW_revision="1" XML_version="1.2" description="66AK2H12" id="66AK2H12_0" partnum="66AK2H12" simulation="no">
+                    <router HW_revision="1.0" XML_version="1.2" description="ICEPick_D Router" id="IcePick_D_0" isa="ICEPICK_D">
+                        <subpath id="subpath_1">
+                            <cpu HW_revision="1.0" XML_version="1.2" description="C66xx CGEM+FP CPU" deviceSim="false" id="C66xx_0" isa="TMS320C66XX">
+                                <property Type="filepathfield" Value="xtcievmk2x.gel" id="GEL File"/>
+                            </cpu>
+                        </subpath>
+                    </router>
+                </device>
+            </platform>
+        </connection>
+    </configuration>
+</configurations>
