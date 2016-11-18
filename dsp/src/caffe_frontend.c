@@ -2,10 +2,6 @@
 #include "cnn_layers.h"
 #include "debug_control.h"
 #include "network_model.h"
-
-#define CAFFE_FRONT_COMPLETE
-
-#ifdef CAFFE_FRONT_COMPLETE
 #include "caffe_proto_params.h"
 
 // Array of CNN nodes. Each node will contain layer type and a pointer to context of the corresponding layer.
@@ -74,7 +70,7 @@ void caffe_layer_ctx_init() {
 
 			case CONV:
 				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
-				g_cnn_layer_nodes[lyr].p_lyr_ctx = (CONV_LYR_CTX_T *)malloc(sizeof(CONV_LYR_CTX_T));
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (CONV_LYR_CTX_T *)shared_malloc(sizeof(CONV_LYR_CTX_T));
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				
 				p_conv_ctx->conv_info = (CONV_INFO_T){.map_h = m_h,
@@ -89,7 +85,7 @@ void caffe_layer_ctx_init() {
 				break;
 			case POOL:
 				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
-				g_cnn_layer_nodes[lyr].p_lyr_ctx = (POOL_LYR_CTX_T *)malloc(sizeof(POOL_LYR_CTX_T));
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (POOL_LYR_CTX_T *)shared_malloc(sizeof(POOL_LYR_CTX_T));
 				p_pool_ctx = (POOL_LYR_CTX_T *) g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_pool_ctx->pool_info = (POOL_INFO_T) {.map_h = m_h,
 					.map_w = m_w,
@@ -102,7 +98,7 @@ void caffe_layer_ctx_init() {
 				break;
 			case ACT:
 				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
-				g_cnn_layer_nodes[lyr].p_lyr_ctx = (ACT_LYR_CTX_T *)malloc(sizeof(ACT_LYR_CTX_T));
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (ACT_LYR_CTX_T *)shared_malloc(sizeof(ACT_LYR_CTX_T));
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_act_ctx->act_info = (ACT_INFO_T) {.map_h = m_h,
 					.map_w = m_w,
@@ -112,7 +108,7 @@ void caffe_layer_ctx_init() {
 				break;
 			case INNER_PROD:
 				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
-				g_cnn_layer_nodes[lyr].p_lyr_ctx = (IP_LYR_CTX_T *)malloc(sizeof(IP_LYR_CTX_T));
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (IP_LYR_CTX_T *)shared_malloc(sizeof(IP_LYR_CTX_T));
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_ip_ctx->ip_info = (IP_INFO_T) {.map_h = 1,
 					.map_w = 1,
@@ -121,7 +117,7 @@ void caffe_layer_ctx_init() {
 				break;
 			case SOFTMAX:
 				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
-				g_cnn_layer_nodes[lyr].p_lyr_ctx = (SMAX_LYR_CTX_T *)malloc(sizeof(SMAX_LYR_CTX_T));
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (SMAX_LYR_CTX_T *)shared_malloc(sizeof(SMAX_LYR_CTX_T));
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_smax_ctx->no_inputs = m_h * m_w * n_maps;
 				break;
@@ -189,5 +185,5 @@ void cnn_layer_internal_param_init(void) {
 		}
 	}
 }
-#endif
+
 

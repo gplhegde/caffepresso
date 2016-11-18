@@ -164,3 +164,97 @@ STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	}
 	return SUCCESS;
 }
+
+STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
+	int lyr, core, quo, rem, map, o_h, o_w;
+	IP_LYR_CTX_T *p_ip_ctx;
+	CONV_LYR_CTX_T *p_conv_ctx;
+	POOL_LYR_CTX_T *p_pool_ctx;
+	ACT_LYR_CTX_T *p_act_ctx;
+	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
+
+	for (lyr = 0; lyr < n_layers; lyr++) {
+
+		switch(p_node->lyr_type) {
+			case CONV:
+				p_conv_ctx = (CONV_LYR_CTX_T *)p_node->p_lyr_ctx;
+				quo = p_conv_ctx->conv_info.no_outputs / NO_CORES;
+				rem = p_conv_ctx->conv_info.no_outputs % NO_CORES;
+				map = 0;
+				for(core = 0; core < NO_CORES; core++) {
+					p_conv_ctx->start_map[core] = map;
+					if(rem == 0) {
+						p_conv_ctx->no_maps[core] = quo;
+						map += quo;
+					} else if(core < rem) {
+						p_conv_ctx->no_maps[core] = quo + 1;
+						map += (quo + 1);
+					} else {
+						p_conv_ctx->no_maps[core] = quo;
+						map += quo;
+					}
+				}
+				break;
+			case POOL:
+				p_pool_ctx = (POOL_LYR_CTX_T *)p_node->p_lyr_ctx;
+				quo = p_pool_ctx->pool_info.no_outputs / NO_CORES;
+				rem = p_pool_ctx->pool_info.no_outputs % NO_CORES;
+				map = 0;
+				for(core = 0; core < NO_CORES; core++) {
+					p_pool_ctx->start_map[core] = map;
+					if(rem == 0) {
+						p_pool_ctx->no_maps[core] = quo;
+						map += quo;
+					} else if(core < rem) {
+						p_pool_ctx->no_maps[core] = quo + 1;
+						map += (quo + 1);
+					} else {
+						p_pool_ctx->no_maps[core] = quo;
+						map += quo;
+					}
+				}
+				break;
+			case ACT:
+				p_act_ctx = (ACT_LYR_CTX_T *)p_node->p_lyr_ctx;
+				quo = p_act_ctx->act_info.no_outputs / NO_CORES;
+				rem = p_act_ctx->act_info.no_outputs % NO_CORES;
+				map = 0;
+				for(core = 0; core < NO_CORES; core++) {
+					p_act_ctx->start_map[core] = map;
+					if(rem == 0) {
+						p_act_ctx->no_maps[core] = quo;
+						map += quo;
+					} else if(core < rem) {
+						p_act_ctx->no_maps[core] = quo + 1;
+						map += (quo + 1);
+					} else {
+						p_act_ctx->no_maps[core] = quo;
+						map += quo;
+					}
+				}
+				break;
+			case INNER_PROD:
+				p_ip_ctx = (IP_LYR_CTX_T *)p_node->p_lyr_ctx;
+				quo = p_ip_ctx->ip_info.no_outputs / NO_CORES;
+				rem = p_ip_ctx->ip_info.no_outputs % NO_CORES;
+				map = 0;
+				for(core = 0; core < NO_CORES; core++) {
+					p_ip_ctx->start_map[core] = map;
+					if(rem == 0) {
+						p_ip_ctx->no_maps[core] = quo;
+						map += quo;
+					} else if(core < rem) {
+						p_ip_ctx->no_maps[core] = quo + 1;
+						map += (quo + 1);
+					} else {
+						p_ip_ctx->no_maps[core] = quo;
+						map += quo;
+					}
+				}
+				break;
+			default:
+				break;
+		}
+		p_node++;
+	}
+}

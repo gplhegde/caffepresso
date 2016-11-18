@@ -1,6 +1,8 @@
 #ifndef _CONV_LAYER_H
 #define _CONV_LAYER_H
 #include "struct_defs.h"
+#include "user_config.h"
+
 //=============================================================
 //=============================================================
 // Convolution layer parameter info
@@ -23,10 +25,6 @@ typedef struct {
 	int no_ker_frac_bits;
 	// No of fraction bits in map pixel representation
 	int no_map_frac_bits;
-	// starting output map assigned to this core. this number is zero based
-	int start_map;
-	// ending output map assigned to this core. this number is zero based
-	int end_map;
 } CONV_INFO_T;
 //=============================================================
 //=============================================================
@@ -46,6 +44,10 @@ typedef struct {
 	FIX_KER *p_fix_bias;
 	// layer arithmetic mode. floating point or fixed point
 	LYR_ARITH_MODE_E lyr_arith_mode;
+	// starting output map assigned to this core. this number is zero based
+	uint16_t start_map[NO_CORES];
+	// number of output maps assigned to this core.
+	uint16_t no_maps[NO_CORES];
 	// Layer parameters.
 	CONV_INFO_T conv_info;
 } CONV_LYR_CTX_T;

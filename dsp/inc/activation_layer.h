@@ -2,6 +2,7 @@
 #define _ACTIVATION_LAYER_H
 #include "struct_defs.h"
 #include "caffe_proto_params.h"
+#include "user_config.h"
 
 //========================================
 //========================================
@@ -26,6 +27,10 @@ typedef struct {
 	FIX_MAP *p_fix_output;
 	// Arithmetic mode to be used to compute the output. float/fixed point
 	LYR_ARITH_MODE_E lyr_arith_mode;
+	// start map/node
+	uint16_t start_map[NO_CORES];
+	// number of assigned maps or output nodes assigned to this core.
+	uint16_t no_maps[NO_CORES];
 	// Parameters
 	ACT_INFO_T act_info;
 

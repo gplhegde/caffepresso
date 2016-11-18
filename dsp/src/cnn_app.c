@@ -22,6 +22,8 @@ STATUS_E main_cnn_app_init() {
 	cnn_app_model_init(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 	REL_INFO("Initialized model weights and biases of all layers\n");
 
+	// split the computation of maps across all cores.
+	workload_sharing_config(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 	return status;
 }
 

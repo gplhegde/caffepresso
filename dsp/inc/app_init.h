@@ -11,4 +11,5 @@ STATUS_E init_ip_layer_params(IP_LYR_CTX_T *p_ip_ctx);
 STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *pp_lyr_nodes, int no_layers);
 STATUS_E cnn_app_memfree(CNN_LYR_NODE_T *pp_lyr_nodes, int no_layers);
 STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *pp_lyr_nodes, int no_layers);
+STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers);
 #endif // _APP_INIT_H_

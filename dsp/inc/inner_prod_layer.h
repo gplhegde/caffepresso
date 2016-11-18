@@ -1,6 +1,7 @@
 #ifndef _INNER_PROD_LAYER_H
 #define _INNER_PROD_LAYER_H
 #include "struct_defs.h"
+#include "user_config.h"
 
 typedef struct {
 	// = 1. This is just to keep uniformity
@@ -33,6 +34,10 @@ typedef struct {
 	FLT_KER *p_flt_bias;
 	// Arithmetic mode to be used to compute the output. float/fixed point
 	LYR_ARITH_MODE_E lyr_arith_mode;
+	// starting output neuron assigned to this core. this number is zero based
+	uint16_t start_map[NO_CORES];
+	// number of output neurons assigned to this core.
+	uint16_t no_maps[NO_CORES];
 	// Parameters
 	IP_INFO_T ip_info;
 } IP_LYR_CTX_T;

@@ -54,7 +54,7 @@ STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_
 			p_conv_ctx->conv_info.ker_size,
 			p_conv_ctx->conv_info.stride,
 			p_conv_ctx->conv_info.no_ker_frac_bits,
-			p_conv_ctx->p_fix_output
+			p_conv_ctx->p_fix_output // TODO: add offset corresponding to this core.
 			);
 	} else {
 		status = dsp_flt_conv_layer(p_flt_in_maps,

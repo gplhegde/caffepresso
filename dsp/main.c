@@ -34,10 +34,10 @@ void dsp_init() {
 }
 
 void main_init() {
-	while(CSL_semAcquireDirect(INIT_DONE_SEM) != 0);
+
 	memset((void*)MSMC_REG_BASE, 0x0, MSMC_SRAM_SIZE);
 	
-	//main_cnn_app_init();
+	main_cnn_app_init();
 	
 	CSL_semReleaseSemaphore(INIT_DONE_SEM);
 }
@@ -54,9 +54,13 @@ int main() {
 	// perform main DNN framework and context init.
 	// Only master core is going to perform this.
 	if(core_id == MASTER_CORE_ID) {
+		while(CSL_semAcquireDirect(INIT_DONE_SEM) != 0);
 		main_init();
+		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 	}
 
+	// wait for all init to get over.
+	while(!CSL_semIsFree(INIT_DONE_SEM));
 	//main_cnn_app(pImage, &label);
 
 	printf("Application complete\n");
