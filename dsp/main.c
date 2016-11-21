@@ -4,6 +4,7 @@
 #include "user_config.h"
 #include "debug_control.h"
 #include "cnn_app.h"
+#include "app_init.h"
 #include "caffe_proto_params.h"
 
 #ifndef DEVICE_K2H
@@ -45,7 +46,7 @@ void main_init() {
 int main() {
 	uint8_t *p_image;
 	int label, img_width, img_height;
-	
+
 	core_id = DNUM;
 	
 	// init core specific HW
@@ -63,6 +64,15 @@ int main() {
 	while(!CSL_semIsFree(INIT_DONE_SEM));
 	//main_cnn_app(pImage, &label);
 
+
+	if(core_id == MASTER_CORE_ID) {
+		while(CSL_semAcquireDirect(INIT_DONE_SEM) != 0);
+		REL_INFO("Relesaing buffers\n");
+		cnn_app_memfree();
+		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	}
+
+	while(!CSL_semIsFree(INIT_DONE_SEM));
 	printf("Application complete\n");
 
 	return 0;

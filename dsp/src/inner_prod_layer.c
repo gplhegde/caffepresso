@@ -1,6 +1,8 @@
 #include "inner_prod_layer.h"
 #include "struct_defs.h"
 
+extern unsigned int core_id;
+
 static inline float float_dot_prod(float *p_input , float *p_weight, int len) {
     int e;
     float sop;
@@ -59,21 +61,21 @@ STATUS_E dsp_ip_layer(IP_LYR_CTX_T *p_ip_ctx, FLT_MAP *p_flt_input, FIX_MAP *p_f
 	STATUS_E status = FAILED;
 
 	if(p_ip_ctx->lyr_arith_mode == FIXED_POINT) {
-		status = dsp_fix_ip_layer(p_fix_input,
-			p_ip_ctx->p_fix_weight,
-			p_ip_ctx->p_fix_bias,
+		status = dsp_fix_ip_layer(p_fix_input + p_ip_ctx->start_map[core_id],
+			p_ip_ctx->p_fix_weight + p_ip_ctx->start_map[core_id] * p_ip_ctx->ip_info.no_inputs,
+			p_ip_ctx->p_fix_bias + p_ip_ctx->start_map[core_id],
 			p_ip_ctx->ip_info.no_inputs,
-			p_ip_ctx->ip_info.no_outputs,
+			p_ip_ctx->no_maps[core_id],
 			p_ip_ctx->ip_info.no_ker_frac_bits,
-			p_ip_ctx->p_fix_output
+			p_ip_ctx->p_fix_output + p_ip_ctx->start_map[core_id]
 			);
 	} else {
-		status = dsp_flt_ip_layer(p_flt_input,
-			p_ip_ctx->p_flt_weight,
-			p_ip_ctx->p_flt_bias,
+		status = dsp_flt_ip_layer(p_flt_input + p_ip_ctx->start_map[core_id],
+			p_ip_ctx->p_flt_weight + p_ip_ctx->start_map[core_id] * p_ip_ctx->ip_info.no_inputs,
+			p_ip_ctx->p_flt_bias +  p_ip_ctx->start_map[core_id],
 			p_ip_ctx->ip_info.no_inputs,
-			p_ip_ctx->ip_info.no_outputs,
-			p_ip_ctx->p_flt_output
+			p_ip_ctx->no_maps[core_id],
+			p_ip_ctx->p_flt_output + p_ip_ctx->start_map[core_id]
 			);
 	}
 	return status;

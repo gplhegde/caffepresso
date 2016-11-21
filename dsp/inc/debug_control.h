@@ -12,6 +12,9 @@
 #else
 #define DBG_INFO(ARGS...) printf(ARGS)
 #define DBG_ASSERT(ARGS...)	assert(ARGS)
+
+#define MASTER_PRINT(ARGS...) \
+	if(DNUM == MASTER_CORE) printf(ARGS)
 #endif
 
 

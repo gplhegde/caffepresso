@@ -1,6 +1,8 @@
 #include "conv_layer.h"
 #include "struct_defs.h"
 
+extern unsigned int core_id;
+
 STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
@@ -8,6 +10,8 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 	int in_width,		// input feature map width
 	int no_inputs,		// number of input feature maps
 	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
 	int ker_size,		// kernel size. We support only square sized kernels
 	int stride,			// convolution window stride in both horizontal and vertical direction.
 	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
@@ -28,6 +32,8 @@ STATUS_E dsp_flt_conv_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 	int in_width,		// input feature map width
 	int no_inputs,		// number of input feature maps
 	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps,		// no of feature maps assigned to this core.
 	int ker_size,		// kernel size. We support only square sized kernels
 	int stride,			// convolution window stride in both horizontal and vertical direction.
 	FLT_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
@@ -51,6 +57,8 @@ STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_
 			p_conv_ctx->conv_info.map_w,
 			p_conv_ctx->conv_info.no_inputs,
 			p_conv_ctx->conv_info.no_outputs,
+			p_conv_ctx->start_map[core_id],
+			p_conv_ctx->no_maps[core_id],
 			p_conv_ctx->conv_info.ker_size,
 			p_conv_ctx->conv_info.stride,
 			p_conv_ctx->conv_info.no_ker_frac_bits,
@@ -64,6 +72,8 @@ STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_
 			p_conv_ctx->conv_info.map_w,
 			p_conv_ctx->conv_info.no_inputs,
 			p_conv_ctx->conv_info.no_outputs,
+			p_conv_ctx->start_map[core_id],
+			p_conv_ctx->no_maps[core_id],
 			p_conv_ctx->conv_info.ker_size,
 			p_conv_ctx->conv_info.stride,
 			p_conv_ctx->p_flt_output

@@ -2,11 +2,13 @@
 #include "struct_defs.h"
 #include <float.h>
 
+extern unsigned int core_id;
+
 STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	int in_height,			// input feature map height
 	int in_width,			// input feature map width
 	int no_inputs,			// number of input feature maps
-	int no_outputs,			// number of output feature maps
+	int start_map,			// the map offset to start from for this core.
 	int win_size,			// kernel size. We support only square sized kernels
 	int stride,				// convolution window stride in both horizontal and vertical direction.
 	int pad,				// padding on all 4 sides of feature map
@@ -25,7 +27,7 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 
 	switch(pool_type) {
 		case MAX_POOL:
-			for (map = 0; map < no_inputs; map++) {
+			for (map = start_map; map < start_map + no_inputs; map++) {
 				for(row = 0; row < in_height - win_size + 1; row += stride) {
 					for(col = 0; col < in_width - win_size + 1; col += stride) {
 						max = -32768; // TODO: define -ve min of FP_MAP_PIXEL type and use here.
@@ -40,7 +42,7 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			}
 			break;
 		case AVG_POOL:
-			for (map = 0; map < no_inputs; map++) {
+			for (map = start_map; map < start_map + no_inputs; map++) {
 				for(row = 0; row < in_height; row += stride) {
 					for(col = 0; col < in_width; col += stride) {
 						sum = 0;
@@ -65,7 +67,7 @@ STATUS_E dsp_flt_pool_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 	int in_height,			// input feature map height
 	int in_width,			// input feature map width
 	int no_inputs,			// number of input feature maps
-	int no_outputs,			// number of output feature maps
+	int start_map,			// the map offset to start from for this core.
 	int win_size,			// kernel size. We support only square sized kernels
 	int stride,				// convolution window stride in both horizontal and vertical direction.
 	int pad,				// padding on all 4 sides of feature map
@@ -84,7 +86,7 @@ STATUS_E dsp_flt_pool_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 	
 	switch(pool_type) {
 		case MAX_POOL:
-			for (map = 0; map < no_inputs; map++) {
+			for (map = start_map; map < start_map + no_inputs; map++) {
 				for(row = 0; row < in_height - win_size + 1; row += stride) {
 					for(col = 0; col < in_width - win_size + 1; col += stride) {
 						max = -FLT_MAX; // TODO: define -ve min of FP_MAP_PIXEL type and use here.
@@ -99,7 +101,7 @@ STATUS_E dsp_flt_pool_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 			}
 			break;
 		case AVG_POOL:
-			for (map = 0; map < no_inputs; map++) {
+			for (map = start_map; map < start_map + no_inputs; map++) {
 				for(row = 0; row < in_height; row += stride) {
 					for(col = 0; col < in_width; col += stride) {
 						sum = 0;
@@ -127,8 +129,8 @@ STATUS_E dsp_pool_layer(POOL_LYR_CTX_T *p_pool_ctx, FLT_MAP *p_flt_in_maps, FIX_
 		status = dsp_fix_pool_layer(p_fix_in_maps,
 			p_pool_ctx->pool_info.map_w,
 			p_pool_ctx->pool_info.map_h,
-			p_pool_ctx->pool_info.no_inputs,
-			p_pool_ctx->pool_info.no_outputs,
+			p_pool_ctx->no_maps[core_id],
+			p_pool_ctx->start_map[core_id],
 			p_pool_ctx->pool_info.win_size,
 			p_pool_ctx->pool_info.stride,
 			p_pool_ctx->pool_info.pad,
@@ -139,8 +141,8 @@ STATUS_E dsp_pool_layer(POOL_LYR_CTX_T *p_pool_ctx, FLT_MAP *p_flt_in_maps, FIX_
 		status = dsp_flt_pool_layer(p_flt_in_maps,
 			p_pool_ctx->pool_info.map_w,
 			p_pool_ctx->pool_info.map_h,
-			p_pool_ctx->pool_info.no_inputs,
-			p_pool_ctx->pool_info.no_outputs,
+			p_pool_ctx->no_maps[core_id],
+			p_pool_ctx->start_map[core_id],
 			p_pool_ctx->pool_info.win_size,
 			p_pool_ctx->pool_info.stride,
 			p_pool_ctx->pool_info.pad,

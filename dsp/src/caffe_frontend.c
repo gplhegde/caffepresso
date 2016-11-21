@@ -4,7 +4,10 @@
 #include "network_model.h"
 #include "caffe_proto_params.h"
 
+extern uint32_t *p_shared_dbuff1;
+extern uint32_t *p_shared_dbuff2;
 // Array of CNN nodes. Each node will contain layer type and a pointer to context of the corresponding layer.
+// TODO: put this array on correct RAM
 CNN_LYR_NODE_T g_cnn_layer_nodes[NO_DEEP_LAYERS];
 
 
@@ -69,7 +72,6 @@ void caffe_layer_ctx_init() {
 		switch(cnn_param_table[lyr].lyrType) {
 
 			case CONV:
-				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (CONV_LYR_CTX_T *)shared_malloc(sizeof(CONV_LYR_CTX_T));
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				
@@ -82,9 +84,16 @@ void caffe_layer_ctx_init() {
 					.no_outputs = cnn_param_table[lyr].nOutMaps,
 					.stride = cnn_param_table[lyr].stride,
 					.pad = cnn_param_table[lyr].pad};
+
+				// set the base address of the shared output buffer for this layer. The offset for this core is
+				// taken care while calling the layer APIs
+				// The buff1 and buff2 are used alternatively for input and output of layers in a ping-pong manner.
+				// Even numbered layers will use buff2 as output, odd layers will use buff1 for output.
+				// Use same buffer for fixed and floating point since both are not needed simultaneously.
+				p_conv_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_conv_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			case POOL:
-				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (POOL_LYR_CTX_T *)shared_malloc(sizeof(POOL_LYR_CTX_T));
 				p_pool_ctx = (POOL_LYR_CTX_T *) g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_pool_ctx->pool_info = (POOL_INFO_T) {.map_h = m_h,
@@ -95,9 +104,10 @@ void caffe_layer_ctx_init() {
 					.stride = cnn_param_table[lyr].stride,
 					.pad = cnn_param_table[lyr].pad,
 					.pool_type = cnn_param_table[lyr].poolType};	// to be filled from table
+				p_pool_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_pool_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			case ACT:
-				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (ACT_LYR_CTX_T *)shared_malloc(sizeof(ACT_LYR_CTX_T));
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_act_ctx->act_info = (ACT_INFO_T) {.map_h = m_h,
@@ -105,21 +115,24 @@ void caffe_layer_ctx_init() {
 					.no_inputs = n_maps,
 					.no_outputs = n_maps,
 					.act_type = cnn_param_table[lyr].actType};	// to be filled from table
+				p_act_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_act_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			case INNER_PROD:
-				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (IP_LYR_CTX_T *)shared_malloc(sizeof(IP_LYR_CTX_T));
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_ip_ctx->ip_info = (IP_INFO_T) {.map_h = 1,
 					.map_w = 1,
 					.no_inputs = m_h * m_w * n_maps,
 					.no_outputs = cnn_param_table[lyr].nOutputs};	// to  be filled form table
+				p_ip_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_ip_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			case SOFTMAX:
-				// FIXME: malloc must be replaced by compile time allocation of all context in appropriate RAM and then assign pointer here
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (SMAX_LYR_CTX_T *)shared_malloc(sizeof(SMAX_LYR_CTX_T));
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_smax_ctx->no_inputs = m_h * m_w * n_maps;
+				p_smax_ctx->p_float_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			default:
 				REL_INFO("Unsupported layer\n");
@@ -147,8 +160,6 @@ void cnn_layer_internal_param_init(void) {
 				p_conv_ctx->conv_info.no_map_frac_bits = 15;
 				p_conv_ctx->lyr_arith_mode = FLOAT_POINT;
 
-				// TODO: init start_map and end_map for this core
-
 				// Pointer to conv weights and biases, taken from the big network model arrays.
 				p_conv_ctx->p_flt_ker = conv_w_ptrs[conv_lyr];
 				p_conv_ctx->p_flt_bias = conv_b_ptrs[conv_lyr];
@@ -157,7 +168,6 @@ void cnn_layer_internal_param_init(void) {
 			case POOL:
 				p_pool_ctx = (POOL_LYR_CTX_T *) g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_pool_ctx->lyr_arith_mode = FLOAT_POINT;
-				// TODO: init start_map and end_map for this core
 				break;
 			case ACT:
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
@@ -168,7 +178,6 @@ void cnn_layer_internal_param_init(void) {
 				// TODO: These should come from user after analyzing the dynamic range of the weights and activations after training.
 				p_ip_ctx->ip_info.no_ker_frac_bits = 11;
 				p_ip_ctx->ip_info.no_map_frac_bits = 15;
-				// TODO: update the per core work related parameters
 				p_ip_ctx->lyr_arith_mode = FLOAT_POINT;
 
 				// Pointer to FC layer weights and biases, taken from the big network model arrays.

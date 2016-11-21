@@ -2,6 +2,8 @@
 #include <math.h>
 #include "debug_control.h"
 
+extern unsigned int core_id;
+
 STATUS_E dsp_fix_activation_layer(FIX_MAP *p_input,	// pointer to input features
 	int N,				// total number of features(pixels) present in the input
 	ACT_TYPE_E act_type,// type of activation. ReLU, sigmoid, tanh
@@ -84,22 +86,23 @@ STATUS_E dsp_flt_activation_layer(FLT_MAP *p_input,	// pointer to input features
 
 STATUS_E dsp_activation_layer(ACT_LYR_CTX_T *p_act_ctx, FLT_MAP *p_flt_in_maps, FIX_MAP *p_fix_in_maps) {
 	int N;
+	unsigned int buff_offset;
 	STATUS_E ret_status = FAILED;
 
-	N = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->act_info.no_inputs * p_act_ctx->act_info.no_outputs;
-
+	N = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->no_maps[core_id];
+	buff_offset = core_id * p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->start_map[core_id];
     switch(p_act_ctx->lyr_arith_mode) {
         case FLOAT_POINT:
-        	ret_status = dsp_flt_activation_layer(p_flt_in_maps,
+        	ret_status = dsp_flt_activation_layer(p_flt_in_maps + buff_offset,
         		N,
 				p_act_ctx->act_info.act_type,
-				p_act_ctx->p_flt_output);
+				p_act_ctx->p_flt_output + buff_offset);
         	break;
         case FIXED_POINT:
-        	ret_status = dsp_fix_activation_layer(p_fix_in_maps,
+        	ret_status = dsp_fix_activation_layer(p_fix_in_maps + buff_offset,
         		N,
 				p_act_ctx->act_info.act_type,
-				p_act_ctx->p_fix_output);
+				p_act_ctx->p_fix_output + buff_offset);
             break;
         default:
             break;

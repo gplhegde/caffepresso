@@ -7,25 +7,7 @@
 #include "sim_image.h"
 #endif // CNN_SIMULATOR
 
-STATUS_E main_cnn_app_init() {
-	STATUS_E status = SUCCESS;
-	
-	caffe_layer_ctx_init();
-	REL_INFO("Initialized context from the LUT\n");
-
-	cnn_layer_internal_param_init();
-	REL_INFO("Initialized app configurations and internal context params\n");
-
-	cnn_app_malloc(g_cnn_layer_nodes, NO_DEEP_LAYERS);
-	REL_INFO("Allocated buffers for all layers\n");
-
-	cnn_app_model_init(g_cnn_layer_nodes, NO_DEEP_LAYERS);
-	REL_INFO("Initialized model weights and biases of all layers\n");
-
-	// split the computation of maps across all cores.
-	workload_sharing_config(g_cnn_layer_nodes, NO_DEEP_LAYERS);
-	return status;
-}
+extern uint32_t *p_shared_dbuff1;
 
 STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	int lyr;
@@ -43,9 +25,9 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	STATUS_E status = SUCCESS;
 
 
-	// assign to ping pong buffer
-	p_fix_input = NULL;
-	p_float_input = NULL;
+	// Use first shared buffer for the input layer.
+	p_fix_input = (FIX_MAP *)p_shared_dbuff1;
+	p_float_input = (FLT_MAP *)p_shared_dbuff1;
 
 	prev_map_h = INPUT_IMG_HEIGHT;
 	prev_map_w = INPUT_IMG_WIDTH;
@@ -68,6 +50,13 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 			case CONV:
 				DBG_INFO("conv layer start\n");
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				// FIXME: the conversion from float <-> fix changes the data space requirement in the shared buffer. Given the fact that the same
+				// buffer is used to fix and float, the conversion will overwrite the data when performing fix to float(read 2 bytes, write 4 bytes)
+				// Solution could be:
+				/*
+				 * 1. Consider the data conversion as a separate layer. That way input and output can be assigned to different buffers.
+				 * 2. Enforce either fixed or floating point mode for all layers except the last smax layer. That way we don't need data conversion.
+				 */
 				if (p_conv_ctx->lyr_arith_mode != prev_arith_mode) {
 					if (p_conv_ctx->lyr_arith_mode == FLOAT_POINT) {
 						DBG_INFO("Converting fix to float\n");
@@ -78,7 +67,11 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 					}
 				}
 				// compute this layer's output
-				//dsp_conv_layer(p_conv_ctx, p_float_input, p_fix_input);
+				dsp_conv_layer(p_conv_ctx, p_float_input, p_fix_input);
+
+				// TODO: wait for all cores to complete their part of the computation.
+				// Sync using semaphore.
+
 				// Assign this output to next layer's input
 				p_fix_input = p_conv_ctx->p_fix_output;
 				p_float_input = p_conv_ctx->p_flt_output;
@@ -86,6 +79,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				prev_frac_bits = p_conv_ctx->conv_info.no_map_frac_bits;
 				prev_map_h = (p_conv_ctx->conv_info.map_h + 2*p_conv_ctx->conv_info.pad - p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
 				prev_map_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad - p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
+				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_conv_ctx->conv_info.no_outputs;
 				DBG_INFO("conv layer END\n");
 				break;
@@ -101,11 +95,12 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 						float_to_fix_data(p_float_input,  prev_map_h * prev_nmaps * prev_map_w, prev_frac_bits, p_fix_input);
 					}
 				}
-				//dsp_pool_layer(p_pool_ctx, p_float_input, p_fix_input);
+				dsp_pool_layer(p_pool_ctx, p_float_input, p_fix_input);
 				p_fix_input = p_pool_ctx->p_fix_output;
 				p_float_input = p_pool_ctx->p_flt_output;
 				prev_map_h = (p_pool_ctx->pool_info.map_h + 2*p_pool_ctx->pool_info.pad - p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
 				prev_map_w = (p_pool_ctx->pool_info.map_w + 2*p_pool_ctx->pool_info.pad - p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
+				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_pool_ctx->pool_info.no_outputs;
 				prev_arith_mode = p_pool_ctx->lyr_arith_mode;
 				DBG_INFO("pool layer END\n");
@@ -126,6 +121,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				p_float_input = p_act_ctx->p_flt_output;
 				prev_map_h = p_act_ctx->act_info.map_h;
 				prev_map_w = p_act_ctx->act_info.map_w;
+				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_act_ctx->act_info.no_outputs;
 				prev_arith_mode = p_act_ctx->lyr_arith_mode;
 				break;
@@ -140,17 +136,19 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 						float_to_fix_data(p_float_input,  prev_map_h * prev_nmaps * prev_map_w, prev_frac_bits, p_fix_input);
 					}
 				}
-				//dsp_inner_prod_layer(p_ip_ctx, p_float_input, p_fix_input);
+				dsp_ip_layer(p_ip_ctx, p_float_input, p_fix_input);
 				p_fix_input = p_ip_ctx->p_fix_output;
 				p_float_input = p_ip_ctx->p_flt_output;
 				prev_map_h = p_ip_ctx->ip_info.map_h;
 				prev_map_w = p_ip_ctx->ip_info.map_w;
+				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_ip_ctx->ip_info.no_outputs;
 				prev_arith_mode = p_ip_ctx->lyr_arith_mode;
 				break;
 			case SOFTMAX:
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
-				//softmax_layer(p_smax_ctx, p_float_input, p_fix_input);
+				// TODO: make sure that only master core executes this layer.
+				dsp_smax_layer(p_smax_ctx, p_float_input);
 				p_float_input = p_smax_ctx->p_float_output;
 				break;
 			default:
@@ -159,10 +157,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 		}
 	}
 	PRINT_RUNTIME("App main loop runtime", start_time);
-	//DBG_MAPS(cvWaitKey(100000));
-	// TODO: take last layer output and find the max probability/label
-	REL_INFO("Relesaing buffers\n");
-	cnn_app_memfree(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 
+	// TODO: take last layer output and find the max probability/label
 	return status;
 }
