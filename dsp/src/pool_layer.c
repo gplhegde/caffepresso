@@ -28,8 +28,8 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 	switch(pool_type) {
 		case MAX_POOL:
 			for (map = start_map; map < start_map + no_inputs; map++) {
-				for(row = 0; row < in_height - win_size + 1; row += stride) {
-					for(col = 0; col < in_width - win_size + 1; col += stride) {
+				for(row = 0; row < in_height + 2 * pad - win_size + 1; row += stride) {
+					for(col = 0; col < in_width + 2 * pad  - win_size + 1; col += stride) {
 						max = -32768; // TODO: define -ve min of FP_MAP_PIXEL type and use here.
 						for ( i = 0; i < win_size; i++) {
 							for ( j = 0; j < win_size; j++) {
@@ -43,8 +43,8 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			break;
 		case AVG_POOL:
 			for (map = start_map; map < start_map + no_inputs; map++) {
-				for(row = 0; row < in_height; row += stride) {
-					for(col = 0; col < in_width; col += stride) {
+				for(row = 0; row < in_height + 2 * pad  - win_size + 1; row += stride) {
+					for(col = 0; col < in_width + 2 * pad  - win_size + 1; col += stride) {
 						sum = 0;
 						for ( i = 0; i < win_size; i++) {
 							for ( j = 0; j < win_size; j++) {
@@ -87,8 +87,8 @@ STATUS_E dsp_flt_pool_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 	switch(pool_type) {
 		case MAX_POOL:
 			for (map = start_map; map < start_map + no_inputs; map++) {
-				for(row = 0; row < in_height - win_size + 1; row += stride) {
-					for(col = 0; col < in_width - win_size + 1; col += stride) {
+				for(row = 0; row < in_height + 2 * pad - win_size + 1; row += stride) {
+					for(col = 0; col < in_width + 2 * pad- win_size + 1; col += stride) {
 						max = -FLT_MAX; // TODO: define -ve min of FP_MAP_PIXEL type and use here.
 						for ( i = 0; i < win_size; i++) {
 							for ( j = 0; j < win_size; j++) {
@@ -102,8 +102,8 @@ STATUS_E dsp_flt_pool_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 			break;
 		case AVG_POOL:
 			for (map = start_map; map < start_map + no_inputs; map++) {
-				for(row = 0; row < in_height; row += stride) {
-					for(col = 0; col < in_width; col += stride) {
+				for(row = 0; row < in_height + 2 * pad  - win_size + 1; row += stride) {
+					for(col = 0; col < in_width + 2 * pad  - win_size + 1; col += stride) {
 						sum = 0;
 						for ( i = 0; i < win_size; i++) {
 							for ( j = 0; j < win_size; j++) {
