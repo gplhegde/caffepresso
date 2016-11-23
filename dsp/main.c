@@ -31,16 +31,16 @@ void dsp_init() {
 	// Disable caching for starting 16MB DDR(refer to the API)
 	CACHE_disableCaching (128);
 	// L2 RAM is local to the core. Hence each core will clear their own L2 RAMs
-	memset((void*)L2_HEAP_BASE, 0x0, L2_HEAP_SIZE);
+	//memset((void*)L2_HEAP_BASE, 0x0, L2_HEAP_SIZE);
 }
 
 void main_init() {
-
+	// Reset the MSMC RAM
 	memset((void*)MSMC_REG_BASE, 0x0, MSMC_SRAM_SIZE);
-	
+	// Just reset the semaphore.
+	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	// Init the main framework
 	main_cnn_app_init();
-	
-	CSL_semReleaseSemaphore(INIT_DONE_SEM);
 }
 
 int main() {
@@ -48,14 +48,13 @@ int main() {
 	int label, img_width, img_height;
 
 	core_id = DNUM;
-	
 	// init core specific HW
 	dsp_init();
 	
 	// perform main DNN framework and context init.
 	// Only master core is going to perform this.
 	if(core_id == MASTER_CORE_ID) {
-		while(CSL_semAcquireDirect(INIT_DONE_SEM) != 0);
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
 		main_init();
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 	}
@@ -66,7 +65,7 @@ int main() {
 
 
 	if(core_id == MASTER_CORE_ID) {
-		while(CSL_semAcquireDirect(INIT_DONE_SEM) != 0);
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
 		REL_INFO("Relesaing buffers\n");
 		cnn_app_memfree();
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);

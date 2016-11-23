@@ -40,8 +40,7 @@
 #define MASTER_CORE_ID			0
 // HW semaphores for shared data coherency and synchronization
 #define INIT_DONE_SEM	 		2
-
-// Location of the shared data structure. This belongs to MSMC RAM address space.
-#define MAPS_INFO_PTR 0x80000000
+// semaphore for data synchronization. Same above semaphore can be used. Just to have simplicity we use different one.
+#define DATA_SYNC_SEM			3
 
 #endif /*_USER_CONFIG_H */

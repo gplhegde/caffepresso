@@ -33,8 +33,8 @@
 #define MSMC_SHARED_SRAM_BASE 	(CSL_MSMC_SRAM_REGS)
 #define MSMC_SHARED_SRAM_END	(CSL_MSMC_SRAM_REGS + MSMC_SRAM_SIZE - 1)
 // FIXME: based should be moved to some offset since the network model is stored in .sharedram which is on DDR as well
-#define DDR_SHARED_RAM_BASE		(CSL_DDR3_0_DATA + 1000000)	// keeping a safe offset of 16MB for the network model(FC layers).
-#define DDR_SHARED_DRAM_END		(DDR_SHARED_RAM_BASE - DDR_RAM_SIZE - 1)
+#define DDR_SHARED_DRAM_BASE		(CSL_DDR3_0_DATA + 0x1000000)	// keeping a safe offset of 16MB for the network model(FC layers).
+#define DDR_SHARED_DRAM_END		(CSL_DDR3_0_DATA + (DDR_RAM_SIZE - 1))
 
 void * shared_malloc(size_t size) {
 	uint32_t no_blocks;
@@ -62,18 +62,18 @@ void * private_malloc(size_t size) {
 void * ext_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;
-	static char *p_shared_cur_free = (char *)DDR_SHARED_RAM_BASE;
+	static char *p_ext_cur_free = (char *)DDR_SHARED_DRAM_BASE;
 
 
 	no_blocks = (size + DRAM_ALIGNMENT - 1) / DRAM_ALIGNMENT;
-	p_new_free = p_shared_cur_free + no_blocks * DRAM_ALIGNMENT;
+	p_new_free = p_ext_cur_free + no_blocks * DRAM_ALIGNMENT;
 
 	if (p_new_free > (char *)DDR_SHARED_DRAM_END) {
 		REL_INFO("Cannot allocate memory\n");
 		return NULL;
 	}
-	ptr = p_shared_cur_free;
-	p_shared_cur_free = p_new_free;
+	ptr = p_ext_cur_free;
+	p_ext_cur_free = p_new_free;
 	return ptr;
 }
 

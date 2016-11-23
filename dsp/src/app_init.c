@@ -154,6 +154,49 @@ STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	DBG_INFO("Allocating 2 buffers with max buffer size requirement\n");
 	p_shared_dbuff1 = (uint32_t*)shared_malloc(sizeof(FLT_MAP) * max_buff_elements);
 	p_shared_dbuff2 = (uint32_t*)shared_malloc(sizeof(FLT_MAP) * max_buff_elements);
+
+	//===============
+	CONV_LYR_CTX_T *p_conv_ctx;
+	POOL_LYR_CTX_T *p_pool_ctx;
+	ACT_LYR_CTX_T *p_act_ctx;
+	IP_LYR_CTX_T * p_ip_ctx;
+	SMAX_LYR_CTX_T *p_smax_ctx;
+
+	for (lyr = 0; lyr < n_layers; lyr++) {
+		switch(g_cnn_layer_nodes[lyr].lyr_type) {
+			case CONV:
+				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				// set the base address of the shared output buffer for this layer. The offset for this core is
+				// taken care while calling the layer APIs
+				// The buff1 and buff2 are used alternatively for input and output of layers in a ping-pong manner.
+				// Even numbered layers will use buff2 as output, odd layers will use buff1 for output.
+				// Use same buffer for fixed and floating point since both are not needed simultaneously.
+				p_conv_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_conv_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			case POOL:
+				p_pool_ctx = (POOL_LYR_CTX_T *) g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_pool_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_pool_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			case ACT:
+				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_act_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_act_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			case INNER_PROD:
+				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_ip_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_ip_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			case SOFTMAX:
+				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_smax_ctx->p_float_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			default:
+				REL_INFO("Unsupported layer\n");
+		}
+	}
 	return SUCCESS;
 }
 
@@ -192,7 +235,7 @@ STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 }
 
 STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
-	int lyr, core, quo, rem, map, o_h, o_w;
+	int lyr, core, quo, rem, map;
 	IP_LYR_CTX_T *p_ip_ctx;
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
@@ -293,7 +336,6 @@ STATUS_E main_cnn_app_init() {
 
 
 	cnn_layer_internal_param_init();
-
 
 
 	cnn_app_malloc(g_cnn_layer_nodes, NO_DEEP_LAYERS);

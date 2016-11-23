@@ -3,11 +3,17 @@
 #include "debug_control.h"
 #include "app_profile.h"
 #include "misc_utils.h"
+#include <ti/csl/csl_semAux.h>
 #ifdef CNN_SIMULATOR
 #include "sim_image.h"
 #endif // CNN_SIMULATOR
 
 extern uint32_t *p_shared_dbuff1;
+extern unsigned int core_id;
+
+// The counter for keeping count of how many cores are done computing.
+#pragma DATA_SECTION(shared_layer_sync_cnt, ".sharedram")
+int shared_layer_sync_cnt;
 
 STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	int lyr;
@@ -32,13 +38,17 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	prev_map_h = INPUT_IMG_HEIGHT;
 	prev_map_w = INPUT_IMG_WIDTH;
 	prev_nmaps = NO_INPUT_MAPS;
-
-	// mean and contrast normalization
-	mean_normalize(p_image, prev_map_h * prev_nmaps, prev_map_w, &var, p_float_input);
-
 	p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[0].p_lyr_ctx;
-	float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
 
+	if(core_id == MASTER_CORE_ID) {
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
+		// mean and contrast normalization
+		mean_normalize(p_image, prev_map_h * prev_nmaps, prev_map_w, &var, p_float_input);
+		float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
+		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	}
+	// other cores wait for the image buffer to be initialized by the master
+	while(!CSL_semIsFree(INIT_DONE_SEM));
 	prev_arith_mode = FLOAT_POINT;
 	prev_frac_bits = p_conv_ctx->conv_info.no_map_frac_bits;
 	
@@ -46,6 +56,8 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	GET_TIME(&start_time);
 	for (lyr = 0; lyr < NO_DEEP_LAYERS; lyr++) {
 		DBG_INFO("Computing layer %d outputs\n", lyr);
+
+
 		switch(g_cnn_layer_nodes[lyr].lyr_type) {
 			case CONV:
 				DBG_INFO("conv layer start\n");
@@ -56,6 +68,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				/*
 				 * 1. Consider the data conversion as a separate layer. That way input and output can be assigned to different buffers.
 				 * 2. Enforce either fixed or floating point mode for all layers except the last smax layer. That way we don't need data conversion.
+				 * 3. Perform data conversion using only one core, say, master.
 				 */
 				if (p_conv_ctx->lyr_arith_mode != prev_arith_mode) {
 					if (p_conv_ctx->lyr_arith_mode == FLOAT_POINT) {
@@ -77,8 +90,10 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				p_float_input = p_conv_ctx->p_flt_output;
 				prev_arith_mode = p_conv_ctx->lyr_arith_mode;
 				prev_frac_bits = p_conv_ctx->conv_info.no_map_frac_bits;
-				prev_map_h = (p_conv_ctx->conv_info.map_h + 2*p_conv_ctx->conv_info.pad - p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
-				prev_map_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad - p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
+				prev_map_h = (p_conv_ctx->conv_info.map_h + 2*p_conv_ctx->conv_info.pad -
+						p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
+				prev_map_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad -
+						p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1)/p_conv_ctx->conv_info.stride;
 				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_conv_ctx->conv_info.no_outputs;
 				DBG_INFO("conv layer END\n");
@@ -98,8 +113,10 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				dsp_pool_layer(p_pool_ctx, p_float_input, p_fix_input);
 				p_fix_input = p_pool_ctx->p_fix_output;
 				p_float_input = p_pool_ctx->p_flt_output;
-				prev_map_h = (p_pool_ctx->pool_info.map_h + 2*p_pool_ctx->pool_info.pad - p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
-				prev_map_w = (p_pool_ctx->pool_info.map_w + 2*p_pool_ctx->pool_info.pad - p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
+				prev_map_h = (p_pool_ctx->pool_info.map_h + 2*p_pool_ctx->pool_info.pad -
+						p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
+				prev_map_w = (p_pool_ctx->pool_info.map_w + 2*p_pool_ctx->pool_info.pad -
+						p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
 				// FIXME: Only consider the maps corresponding to this core here.
 				prev_nmaps = p_pool_ctx->pool_info.no_outputs;
 				prev_arith_mode = p_pool_ctx->lyr_arith_mode;
@@ -147,14 +164,31 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				break;
 			case SOFTMAX:
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
-				// TODO: make sure that only master core executes this layer.
-				dsp_smax_layer(p_smax_ctx, p_float_input);
+				// only master core performs final softmax layer.
+				if(core_id == MASTER_CORE_ID) {
+					dsp_smax_layer(p_smax_ctx, p_float_input);
+				}
 				p_float_input = p_smax_ctx->p_float_output;
 				break;
 			default:
 				REL_INFO("Unsupported layer\n");
 				return UNSUPPORTED_FEATURE;
 		}
+		// Wait for the semaphore to be free before proceeding to next layer
+		while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+		shared_layer_sync_cnt++;
+		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+
+		// wait for all cores to increment the completion count
+		while(shared_layer_sync_cnt != NO_CORES);
+
+		if(core_id == MASTER_CORE_ID) {
+			while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+			// reset the count after each layer
+			shared_layer_sync_cnt = 0;
+			CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+		}
+		while(!CSL_semIsFree(DATA_SYNC_SEM));
 	}
 	PRINT_RUNTIME("App main loop runtime", start_time);
 
