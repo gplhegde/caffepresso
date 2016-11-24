@@ -2,7 +2,7 @@
 #include "struct_defs.h"
 #include "imglib.h"
 #include <string.h>
-
+#include "debug_control.h"
 #define MAX_FEATUE_MAP_WIDTH	256
 
 extern unsigned int core_id;
