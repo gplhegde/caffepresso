@@ -22,6 +22,27 @@ static inline void float_vect_add(float *p_vect1, float *p_vect2, int v_len, flo
     }
 }
 
+static inline float fix16_dot_prod(FIX_MAP *p_input , FIX_KER *p_weight, int len, int shift) {
+    int e;
+    int32_t sop;
+
+    sop = 0;
+    for (e = 0; e < len; e++) {
+        sop += p_input[e] * p_weight[e];
+    }
+	// TODO:hanfle to overflow
+    return (FIX_MAP)(sop >> shift);
+}
+
+static inline void fix16_vect_add(FIX_MAP *p_vect1, FIX_MAP *p_vect2, int len, FIX_MAP *p_sum) {
+    int e;
+    for ( e = 0; e < len; e++) {
+        p_sum[e] = p_vect1[e] + p_vect2[e];
+    }
+}
+
+
+
 STATUS_E dsp_fix_ip_layer(FIX_MAP *p_input,	// pointer to input features
 	FIX_KER *p_weight,	// pointer to weight matrix stored in [no_outputs][no_inputs] manner
 	FIX_KER *p_bias,	// pointer to bias units
@@ -31,10 +52,16 @@ STATUS_E dsp_fix_ip_layer(FIX_MAP *p_input,	// pointer to input features
 	FIX_MAP *p_output	// pointer to output features.
 	) {
 
-	STATUS_E status = FAILED;
-	// TODO 
-	// Refer to https://github.com/gplhegde/caffepresso/blob/master/mxp/src/inner_prod_layer.c:scalar_fix_ip_layer function for
-	// implementation details.
+	int n;
+	STATUS_E status = SUCCESS;
+
+	for ( n = 0; n < no_outputs; n++) {
+		// TODO: Use DSPLIB APIs if exists for this
+		p_output[n] = fix16_dot_prod(p_input, p_weight + n * no_inputs, no_inputs, shift);
+	}
+	// FIXME: make sure that both bias and the SOP are in the same Q format
+	fix16_vect_add(p_output, p_bias, no_outputs, p_output);
+
 	return status;
 }
 
@@ -50,6 +77,7 @@ STATUS_E dsp_flt_ip_layer(FLT_MAP *p_input,	// pointer to input features
 	
 
 	for ( n = 0; n < no_outputs; n++) {
+		// TODO: Use DSPLIB APIs like DSPF_sp_dotprod for this
 		p_output[n] = float_dot_prod(p_input, p_weight + n * no_inputs, no_inputs);
 	}
 	float_vect_add(p_output, p_bias, no_outputs, p_output);
@@ -61,7 +89,7 @@ STATUS_E dsp_ip_layer(IP_LYR_CTX_T *p_ip_ctx, FLT_MAP *p_flt_input, FIX_MAP *p_f
 	STATUS_E status = FAILED;
 
 	if(p_ip_ctx->lyr_arith_mode == FIXED_POINT) {
-		status = dsp_fix_ip_layer(p_fix_input + p_ip_ctx->start_map[core_id],
+		status = dsp_fix_ip_layer(p_fix_input,
 			p_ip_ctx->p_fix_weight + p_ip_ctx->start_map[core_id] * p_ip_ctx->ip_info.no_inputs,
 			p_ip_ctx->p_fix_bias + p_ip_ctx->start_map[core_id],
 			p_ip_ctx->ip_info.no_inputs,
@@ -70,7 +98,7 @@ STATUS_E dsp_ip_layer(IP_LYR_CTX_T *p_ip_ctx, FLT_MAP *p_flt_input, FIX_MAP *p_f
 			p_ip_ctx->p_fix_output + p_ip_ctx->start_map[core_id]
 			);
 	} else {
-		status = dsp_flt_ip_layer(p_flt_input + p_ip_ctx->start_map[core_id],
+		status = dsp_flt_ip_layer(p_flt_input,
 			p_ip_ctx->p_flt_weight + p_ip_ctx->start_map[core_id] * p_ip_ctx->ip_info.no_inputs,
 			p_ip_ctx->p_flt_bias +  p_ip_ctx->start_map[core_id],
 			p_ip_ctx->ip_info.no_inputs,

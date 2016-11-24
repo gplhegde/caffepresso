@@ -175,6 +175,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 					}
 				}
 				// add bias
+				// FIXME: make sure that both bias and output are in the same Q format
 				dsp_vs_add(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;

@@ -14,7 +14,7 @@
 // TODO: Get these directly from TI platform specific header files.
 #ifndef __KEYSTONE1
 
-#define DSP_FREQ_IN_MHZ			1400
+
 #define NO_CORES 				8
 #define MSMC_REG_BASE			0x0C000000
 #define MSMC_SRAM_SIZE 			(6*1024*1024)
@@ -25,7 +25,7 @@
 #define DDR_SIZE				0x00A00000
 
 #else
-#define DSP_FREQ_IN_MHZ			1000
+
 #define NUM_CORES 				8
 #define MSMC_REG_BASE			0x0C000000
 #define MSMC_SRAM_SIZE 			(4*1024*1024)
