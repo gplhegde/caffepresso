@@ -67,15 +67,17 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 
 	switch(ker_size) {
 		case 3:
-			// The input and output width for  IMG_conv_3x3_i16_c16s API must be multiple of 4.
-			new_width = in_width - ker_size + 1;
-			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + new_width % 4);
+			// The output width for  IMG_conv_3x3_i16s_c16s API must be multiple of 2.
+			new_width = in_width - 2;
+			new_width = ((new_width & 0x1) == 0)? new_width : (new_width + 1);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						IMG_conv_3x3_i16_c16s(p_input + (imap * in_height + row ) * in_width,
+						//memcpy(private_temp_buff1, )
+						IMG_conv_3x3_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
 							private_temp_buff,
 							new_width,
+							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -101,7 +103,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
 						IMG_conv_5x5_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
 							private_temp_buff,
-							new_width - ker_size + 1,
+							new_width - 4,
 							new_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
@@ -124,7 +126,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
 
 			new_width = in_width - ker_size + 1;
-			new_width = ((new_width & 0x7) == 0)? new_width : (new_width + new_width % 8);
+			new_width = ((new_width & 0x7) == 0)? new_width : (new_width + 8 - new_width % 8);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
@@ -153,7 +155,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
 
 			new_width = in_width - ker_size + 1;
-			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + new_width % 4);
+			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + 4 - new_width % 4);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
@@ -216,12 +218,15 @@ STATUS_E dsp_flt_conv_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 				for(imap = 0; imap < no_inputs; imap++){
 					for(kr = 0; kr < ker_size; kr++) {
 						for(kc = 0; kc < ker_size; kc++){
-							sum += p_weight[((omap * no_inputs + imap) * ker_size + kr) * ker_size + kc] * p_input[(imap * in_height + row) * in_width + col];
+							sum += p_weight[((omap * no_inputs + imap) * ker_size + kr) * ker_size + kc] * 
+								p_input[(imap * in_height + row + kr) * in_width + col + kc];
+
 						}
 					}
 				}
 				sum += p_bias[omap];
-				p_output[(omap * o_h + row/stride) * o_w + col/stride] = sum;
+				//p_output[(omap * o_h + row/stride) * o_w + col/stride] = sum;
+				p_output[omap * o_h * o_w + o_w * (row / stride) + (col / stride)] = sum;
 			}
 		}
 	}
@@ -231,7 +236,8 @@ STATUS_E dsp_flt_conv_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 
 STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_MAP *p_fix_in_map) {
 	STATUS_E status = FAILED;
-
+	// TODO: add padding support. Throw exception for time being.
+	REL_ASSERT(p_conv_ctx->conv_info.pad == 0);
 	if(p_conv_ctx->lyr_arith_mode == FIXED_POINT) {
 		status = dsp_fix_conv_layer(p_fix_in_map,
 			p_conv_ctx->p_fix_ker,

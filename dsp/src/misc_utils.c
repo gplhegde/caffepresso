@@ -200,6 +200,25 @@ void generate_random_data(float *p_data, int N, int seed) {
 	}
 }
 
+void rotate_180(FIX_KER *mat, int M, int N) {
+	int row, col, temp;
+	for(row = 0; row < M/2; row++){
+		for(col = 0; col < N; col++) {
+			temp = mat[row * N + col];
+			mat[row * N + col] = mat[(M - row - 1) * N + (N-col-1)];
+			mat[(M - row - 1) * N + (N-col-1)] = temp;
+		}
+	}
+	if(M % 2) {
+		row = M / 2;
+		for(col = 0; col < N / 2; col++) {
+			temp = mat[row * N + col];
+			mat[row * N + col] = mat[(M - row - 1) * N + (N-col-1)];
+			mat[(M - row - 1) * N + (N-col-1)] = temp;
+		}
+	}
+}
+
 void check_cmp_status(CMP_STATUS_T *p_status) {
 	if(p_status->flag == TEST_PASS) {
 		printf("PASSED\n");

@@ -1,6 +1,9 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "debug_control.h"
 #include "unit_test.h"
+#include "misc_utils.h"
+
 #ifndef DEVICE_K2H
 #error "Device not specified"
 #endif
@@ -51,14 +54,14 @@ int test_layers() {
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
-	/*
+
 	printf("--------Testing CONV Layer-------\n");
 	status = test_conv_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Conv layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
-	}*/
+	}
 	printf("--------Testing FC Layer-------\n");
 	status = test_ip_layer();
 	if(status != TEST_PASS) {

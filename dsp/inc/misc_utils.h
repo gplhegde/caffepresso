@@ -34,5 +34,7 @@ void generate_random_img(uint8_t *p_img, int H, int W);
 
 void generate_random_data(float *p_data, int N, int seed);
 
+void rotate_180(FIX_KER *mat, int M, int N);
+
 void check_cmp_status(CMP_STATUS_T *p_status);
 #endif // _TEST_UTILITY_H_

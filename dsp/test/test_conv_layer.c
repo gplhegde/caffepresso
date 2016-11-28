@@ -1,6 +1,7 @@
 #include "unit_test.h"
 #include "conv_layer.h"
 #include "misc_utils.h"
+#include "mem_manager.h"
 #include <stdio.h>
 #include <math.h>
 
@@ -64,7 +65,7 @@ CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *p_ctx, FLT_MAP *p_output) {
 
 TEST_STATUS_E test_conv_layer() {
 	int no_inputs, no_outputs, input_height, input_width, K, stride, pad, k, i;
-	int out_width, out_height, no_map_frac_bits, no_ker_frac_bits, map, coeff;
+	int out_width, out_height, no_map_frac_bits, no_ker_frac_bits, map, omap;
 	FLT_MAP *p_flt_input;
 	FIX_MAP *p_fix_input;
 	
@@ -76,34 +77,34 @@ TEST_STATUS_E test_conv_layer() {
 	no_inputs = 3;
 	no_outputs = 10;
 	input_height = 9;
-	input_width = 9;
+	input_width = 10;
 	K = 3;
-	stride = 1;
+	stride = 2;
 	pad = 0;
 	no_map_frac_bits = 12;
 	no_ker_frac_bits = 12;
 
 	out_height = (input_height + 2*pad - K + 1 + stride - 1)/ stride;
 	out_width = (input_width + 2*pad - K + 1 + stride - 1)/ stride;
-	conv_ctx.conv_info = (CONV_INFO_T){input_height, input_width, K, no_inputs, no_outputs, pad, stride, no_map_frac_bits, no_ker_frac_bits};
+	conv_ctx.conv_info = (CONV_INFO_T){input_height, input_width, K, no_inputs, no_outputs, pad, stride, no_ker_frac_bits, no_map_frac_bits};
 
 	conv_ctx.lyr_arith_mode = FLOAT_POINT;
 
 
 	// input and output buffer allocation	
-	conv_ctx.p_flt_output = malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
-	conv_ctx.p_fix_output = malloc(out_height * out_width * no_outputs * sizeof(FIX_MAP));
-	conv_ctx.p_flt_ker = malloc(K * K * no_inputs * no_outputs * sizeof(FLT_KER));
-	conv_ctx.p_fix_ker = malloc(K * K * no_inputs * no_outputs * sizeof(FIX_KER));
-	conv_ctx.p_flt_bias = malloc(no_outputs *sizeof(FLT_KER));
-	conv_ctx.p_fix_bias = malloc(no_outputs *sizeof(FIX_KER));
+	conv_ctx.p_flt_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
+	conv_ctx.p_fix_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FIX_MAP));
+	conv_ctx.p_flt_ker = ext_malloc(K * K * no_inputs * no_outputs * sizeof(FLT_KER));
+	conv_ctx.p_fix_ker = ext_malloc(K * K * no_inputs * no_outputs * sizeof(FIX_KER));
+	conv_ctx.p_flt_bias = ext_malloc(no_outputs *sizeof(FLT_KER));
+	conv_ctx.p_fix_bias = ext_malloc(no_outputs *sizeof(FIX_KER));
 
 	conv_ctx.no_maps[0] = conv_ctx.conv_info.no_outputs;
 	conv_ctx.start_map[0] = 0;
 
-	p_conv_ref_flt_output = malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
-	p_flt_input = malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
-	p_fix_input = malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
+	p_conv_ref_flt_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
+	p_flt_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
+	p_fix_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
 
 	// random input
 	generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
@@ -119,13 +120,21 @@ TEST_STATUS_E test_conv_layer() {
 
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 	conv_ctx.lyr_arith_mode = FIXED_POINT;
+
+	// rotate the fixed point kernel to cmpensate for the 180 deg rotation performed by the IMGLIB APIs
+	for(omap = 0; omap < no_outputs; omap++) {
+		for(map = 0; map < no_inputs; map++) {
+			rotate_180(conv_ctx.p_fix_ker + omap * no_inputs * K * K + map * K * K, K, K);
+		}
+	}
+
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 
 	//print_fix_img(conv_ctx.p_fix_output, out_height, out_width);
-	print_float_img(conv_ctx.p_flt_output, out_height, out_width);
+	//print_float_img(conv_ctx.p_flt_output, out_height, out_width);
 
 	compute_conv_ref(&conv_ctx, p_flt_input);
-	//print_float_img(p_conv_ref_flt_output, out_height, out_width);
+	print_float_img(p_conv_ref_flt_output, out_height, out_width);
 
 	status = compare_conv_out(&conv_ctx, conv_ctx.p_flt_output);
 	check_cmp_status(&status);
@@ -136,17 +145,14 @@ TEST_STATUS_E test_conv_layer() {
 	check_cmp_status(&status);
 
 
-	free(conv_ctx.p_flt_output);
-	free(conv_ctx.p_fix_output);
-	free(conv_ctx.p_flt_ker);
-	free(conv_ctx.p_fix_ker);
-	free(conv_ctx.p_flt_bias);
-	free(conv_ctx.p_fix_bias);
-
-
-
-	free(p_conv_ref_flt_output);
-	free(p_fix_input);
-	free(p_flt_input);
+	ext_free(conv_ctx.p_flt_output);
+	ext_free(conv_ctx.p_fix_output);
+	ext_free(conv_ctx.p_flt_ker);
+	ext_free(conv_ctx.p_fix_ker);
+	ext_free(conv_ctx.p_flt_bias);
+	ext_free(conv_ctx.p_fix_bias);
+	ext_free(p_conv_ref_flt_output);
+	ext_free(p_fix_input);
+	ext_free(p_flt_input);
 	return status.flag;
 }
