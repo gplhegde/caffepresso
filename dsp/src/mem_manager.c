@@ -36,10 +36,11 @@
 #define DDR_SHARED_DRAM_BASE		(CSL_DDR3_0_DATA + 0x1000000)	// keeping a safe offset of 16MB for the network model(FC layers).
 #define DDR_SHARED_DRAM_END		(CSL_DDR3_0_DATA + (DDR_RAM_SIZE - 1))
 
+static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE;
 void * shared_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;
-	static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE;
+
 
 
 	no_blocks = (size + MSMC_ALIGNMENT - 1) / MSMC_ALIGNMENT;
@@ -58,11 +59,11 @@ void * private_malloc(size_t size) {
 	// TODO
 	return NULL;
 }
-
+static char *p_ext_cur_free = (char *)DDR_SHARED_DRAM_BASE;
 void * ext_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;
-	static char *p_ext_cur_free = (char *)DDR_SHARED_DRAM_BASE;
+
 
 
 	no_blocks = (size + DRAM_ALIGNMENT - 1) / DRAM_ALIGNMENT;
@@ -77,6 +78,10 @@ void * ext_malloc(size_t size) {
 	return ptr;
 }
 
+void reset_mem_manager() {
+	p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE;
+	p_ext_cur_free = (char *)DDR_SHARED_DRAM_BASE;
+}
 void shared_free(void *ptr) {
 	// TODO
 }

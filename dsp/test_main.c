@@ -17,6 +17,7 @@
 // CPU ID. This is local to each core since we are storing this in local RAM.
 unsigned int core_id;
 
+
 int test_layers();
 
 void dsp_init() {
@@ -33,32 +34,38 @@ void dsp_init() {
 	//memset((void*)L2_HEAP_BASE, 0x0, L2_HEAP_SIZE);
 }
 void main(void) {
-	dsp_init();
 
-	if(DNUM == 0) {
-		test_layers();
-		printf("Application complete\n");
+	core_id = DNUM;
+	if(core_id == 0) {
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
 	}
 
-	while(1);
+	dsp_init();
 
+	test_layers();
+
+	printf("Application complete\n");
+
+	while(1);
 }
 
 
 int test_layers() {
 	TEST_STATUS_E status;
-	printf("--------Testing POOL Layer-------\n");
-	status = test_pool_layer();
-	if(status != TEST_PASS) {
-		REL_INFO("Pool layer test failed\nError = %d\n", status);
-		REL_INFO("Aborting...\n");
-		return -1;
-	}
+
 
 	printf("--------Testing CONV Layer-------\n");
 	status = test_conv_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Conv layer test failed\nError = %d\n", status);
+		REL_INFO("Aborting...\n");
+		return -1;
+	}
+#ifndef TEST_MULTICORE
+	printf("--------Testing POOL Layer-------\n");
+	status = test_pool_layer();
+	if(status != TEST_PASS) {
+		REL_INFO("Pool layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
@@ -69,6 +76,8 @@ int test_layers() {
 		REL_INFO("Aborting...\n");
 		return -1;
 	}
+#endif // TEST_MULTICORE
+
 	return status;
 }
 
