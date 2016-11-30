@@ -65,5 +65,6 @@ SECTIONS
     .c6xabi.extab  >  LOCAL_L2_SRAM
 
     .local_ram	   >  LOCAL_L2_SRAM
+    .shared_ocm	   > SHRAM
     .sharedram	   >  DDR3
 }

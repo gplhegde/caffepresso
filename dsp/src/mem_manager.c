@@ -36,7 +36,7 @@
 #define DDR_SHARED_DRAM_BASE		(CSL_DDR3_0_DATA + 0x1000000)	// keeping a safe offset of 16MB for the network model(FC layers).
 #define DDR_SHARED_DRAM_END		(CSL_DDR3_0_DATA + (DDR_RAM_SIZE - 1))
 
-static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE;
+static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE + 0x400;
 void * shared_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;

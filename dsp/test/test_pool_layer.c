@@ -1,11 +1,20 @@
 #include <stdio.h>
 #include "unit_test.h"
 #include "pool_layer.h"
+#include <ti/csl/csl_semAux.h>
 #include <float.h>
 #include "misc_utils.h"
 #include <math.h>
 
-FLT_MAP *p_ref_flt_output;
+extern unsigned int core_id;
+extern unsigned int far completion_cnt;
+extern FLT_MAP far *p_ref_flt_output;
+extern FLT_MAP far *p_flt_input;
+extern FIX_MAP far *p_fix_input;
+extern FLT_MAP far *p_ref_flt_output;
+
+#pragma DATA_SECTION(pool_ctx, ".sharedram")
+POOL_LYR_CTX_T far pool_ctx;
 
 void compute_pool_ref(POOL_LYR_CTX_T *p_ctx, FLT_MAP *p_flt_input) {
 	int map, row, col, o_h, o_w, i_h, i_w, r ,c;
@@ -65,66 +74,129 @@ TEST_STATUS_E test_pool_layer() {
 	int no_inputs, input_height, input_width, win_size, stride, pad;
 	int out_width, out_height;
 	POOL_TYPE_E pool_type;
-	FLT_MAP *p_flt_input;
-	FIX_MAP *p_fix_input;
-	
 	CMP_STATUS_T status;
+	status.flag = TEST_PASS;
 
-	POOL_LYR_CTX_T pool_ctx;
+	if(core_id == 0) {
+		completion_cnt = 0;
+		no_inputs = 3;
+		input_height = 17;
+		input_width = 17;
+		win_size = 2;
+		stride = 2;
+		pad = 0;
+		pool_type = MAX_POOL;
+	
+		out_height = (input_height + 2*pad - win_size + 1 + stride - 1)/ stride;
+		out_width = (input_width + 2*pad - win_size + 1 + stride - 1)/ stride;
+		// populate pool layer context
+		pool_ctx.pool_info = (POOL_INFO_T){input_height, input_width, no_inputs, no_inputs, win_size, stride, pad, pool_type};
+		pool_ctx.lyr_arith_mode = FLOAT_POINT;
+#ifdef TEST_MULTICORE
+		int quo, rem, core, map;
+		quo = pool_ctx.pool_info.no_outputs / NO_CORES;
+		rem = pool_ctx.pool_info.no_outputs % NO_CORES;
+		map = 0;
+		for(core = 0; core < NO_CORES; core++) {
+			pool_ctx.start_map[core] = map;
+			if(rem == 0) {
+				pool_ctx.no_maps[core] = quo;
+				map += quo;
+			} else if(core < rem) {
+				pool_ctx.no_maps[core] = quo + 1;
+				map += (quo + 1);
+			} else {
+				pool_ctx.no_maps[core] = quo;
+				map += quo;
+			}
+		}
+#else
+		pool_ctx.no_maps[0] = pool_ctx.pool_info.no_outputs;
+		pool_ctx.start_map[0] = 0;
+#endif	
+		// input and output buffer allocation	
+		pool_ctx.p_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
+		pool_ctx.p_fix_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FIX_MAP));
+		p_ref_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
+		p_flt_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
+		p_fix_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
+	
+		// random input
+		generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
+		float_to_fix_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 14, p_fix_input);
+		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+		printf("Released sem\n");
+	}
+	// wait for all init to get over.
+	while(!CSL_semIsFree(INIT_DONE_SEM));
 
-	printf("Testing POOL Layer\n");
-	no_inputs = 3;
-	input_height = 17;
-	input_width = 17;
-	win_size = 2;
-	stride = 2;
-	pad = 0;
-	pool_type = MAX_POOL;
-
-	out_height = (input_height + 2*pad - win_size + 1 + stride - 1)/ stride;
-	out_width = (input_width + 2*pad - win_size + 1 + stride - 1)/ stride;
-	// populate pool layer context
-	pool_ctx.pool_info = (POOL_INFO_T){input_height, input_width, no_inputs, no_inputs, win_size, stride, pad, pool_type};
-	pool_ctx.lyr_arith_mode = FLOAT_POINT;
-	pool_ctx.no_maps[0] = pool_ctx.pool_info.no_outputs;
-	pool_ctx.start_map[0] = 0;
-
-	// input and output buffer allocation	
-	pool_ctx.p_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
-	pool_ctx.p_fix_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FIX_MAP));
-	p_ref_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
-	p_flt_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
-	p_fix_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
-
-	// random input
-	generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
-	float_to_fix_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 14, p_fix_input);
-
+#ifdef TEST_MULTICORE	
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
-	// compute fixed point scalar output
-	pool_ctx.lyr_arith_mode = FIXED_POINT;
+#else
+	if(core_id == 0) {
+		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
+	}
+#endif
+
+	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+	completion_cnt++;
+	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+
+#ifdef TEST_MULTICORE
+	while(completion_cnt != NO_CORES);
+#endif
+
+	if(core_id == 0) {
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));		
+		// compute fixed point scalar output
+		pool_ctx.lyr_arith_mode = FIXED_POINT;
+		completion_cnt = 0;
+		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	}
+
+	while(!CSL_semIsFree(INIT_DONE_SEM));
+
+#ifdef TEST_MULTICORE	
+	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
-
-	//print_float_img(pool_ctx.p_flt_output, out_height, out_width);
-
-	// compute reference output from the pooling function defined in this file
-	compute_pool_ref(&pool_ctx, p_flt_input);
-	//print_float_img(p_ref_flt_output + 1 * out_height * out_width, out_height, out_width);
-
-	status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
-	check_cmp_status(&status);
-
-	fix16_to_float_data(pool_ctx.p_fix_output, out_height * out_width * no_inputs, 14, pool_ctx.p_flt_output);
-	//print_float_img(pool_ctx.p_flt_output + 1 * out_height * out_width, out_height, out_width);
-	status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
-	check_cmp_status(&status);
-
-
-	ext_free(pool_ctx.p_flt_output);
-	ext_free(pool_ctx.p_fix_output);
-	ext_free(p_ref_flt_output);
-	ext_free(p_fix_input);
-	ext_free(p_flt_input);
+#else
+	if(core_id == 0) {
+		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
+	}
+#endif
+	
+	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+	completion_cnt++;
+	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	
+#ifdef TEST_MULTICORE
+	while(completion_cnt != NO_CORES);
+#endif	
+	if(core_id == 0) {
+		while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+		// compute reference output from the pooling function defined in this file
+		compute_pool_ref(&pool_ctx, p_flt_input);
+		//print_float_img(p_ref_flt_output + 1 * out_height * out_width, out_height, out_width);
+	
+		status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
+		check_cmp_status(&status);
+	
+		fix16_to_float_data(pool_ctx.p_fix_output, out_height * out_width * no_inputs, 14, pool_ctx.p_flt_output);
+		//print_float_img(pool_ctx.p_flt_output + 1 * out_height * out_width, out_height, out_width);
+		status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
+		check_cmp_status(&status);
+	
+	
+		ext_free(pool_ctx.p_flt_output);
+		ext_free(pool_ctx.p_fix_output);
+		ext_free(p_ref_flt_output);
+		ext_free(p_fix_input);
+		ext_free(p_flt_input);
+		reset_mem_manager();
+		completion_cnt = 0;
+		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	}
+	while(!CSL_semIsFree(DATA_SYNC_SEM));
 	return status.flag;
 }

@@ -12,7 +12,7 @@
 void * shared_malloc(size_t size);
 void * private_malloc(size_t size);
 void * ext_malloc(size_t size);
-
+void reset_mem_manager();
 void shared_free(void *ptr);
 void private_free(void *ptr);
 void ext_free(void *ptr);
