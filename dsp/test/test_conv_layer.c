@@ -3,11 +3,13 @@
 #include "misc_utils.h"
 #include "mem_manager.h"
 #include <ti/csl/csl_semAux.h>
+#include <ti/csl/csl_cacheAux.h>
 #include <stdio.h>
 #include <math.h>
 
 
-#pragma DATA_SECTION(conv_ctx, ".sharedram")
+#pragma DATA_SECTION(conv_ctx, ".shared_ocm")
+//#pragma DATA_SECTION(conv_ctx, ".sharedram")
 CONV_LYR_CTX_T far conv_ctx;
 
 
@@ -63,7 +65,7 @@ CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *p_ctx, FLT_MAP *p_output) {
 		for(row = 0; row < o_h; row++) {
 			for(col = 0; col < o_w; col++) {
 				if(fabs(p_output[(map*o_h + row)*o_w + col] - p_ref_flt_output[(map*o_h + row)*o_w + col]) > ERR_THRESHOLD) {
-					//printf("Ref:%f\tAct:%f\n", p_ref_flt_output[(map*o_h + row)*o_w + col], p_output[(map*o_h + row)*o_w + col]);
+					printf("Ref:%f\tAct:%f\n", p_ref_flt_output[(map*o_h + row)*o_w + col], p_output[(map*o_h + row)*o_w + col]);
 					status.mis_map = map;
 					status.mis_row = row;
 					status.mis_col = col;
@@ -81,17 +83,18 @@ TEST_STATUS_E test_conv_layer() {
 	int out_width, out_height, no_map_frac_bits, no_ker_frac_bits, map, omap;
 	CMP_STATUS_T status;
 
+	status.flag = TEST_PASS;
 	if(core_id == 0) {
 		completion_cnt = 0;
-		no_inputs = 3;
-		no_outputs = 10;
-		input_height = 9;
-		input_width = 10;
-		K = 3;
-		stride = 2;
+		no_inputs = 1;
+		no_outputs = 20;
+		input_height = 28;
+		input_width = 28;
+		K = 5;
+		stride = 1;
 		pad = 0;
-		no_map_frac_bits = 12;
-		no_ker_frac_bits = 12;
+		no_map_frac_bits = 10;
+		no_ker_frac_bits = 10;
 	
 		out_height = (input_height + 2*pad - K + 1 + stride - 1)/ stride;
 		out_width = (input_width + 2*pad - K + 1 + stride - 1)/ stride;
@@ -100,12 +103,12 @@ TEST_STATUS_E test_conv_layer() {
 		conv_ctx.lyr_arith_mode = FLOAT_POINT;
 	
 		// input and output buffer allocation	
-		conv_ctx.p_flt_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
-		conv_ctx.p_fix_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FIX_MAP));
-		conv_ctx.p_flt_ker = ext_malloc(K * K * no_inputs * no_outputs * sizeof(FLT_KER));
-		conv_ctx.p_fix_ker = ext_malloc(K * K * no_inputs * no_outputs * sizeof(FIX_KER));
-		conv_ctx.p_flt_bias = ext_malloc(no_outputs *sizeof(FLT_KER));
-		conv_ctx.p_fix_bias = ext_malloc(no_outputs *sizeof(FIX_KER));
+		conv_ctx.p_flt_output = shared_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
+		conv_ctx.p_fix_output = shared_malloc(out_height * out_width * no_outputs * sizeof(FIX_MAP));
+		conv_ctx.p_flt_ker = shared_malloc(K * K * no_inputs * no_outputs * sizeof(FLT_KER));
+		conv_ctx.p_fix_ker = shared_malloc(K * K * no_inputs * no_outputs * sizeof(FIX_KER));
+		conv_ctx.p_flt_bias = shared_malloc(no_outputs * sizeof(FLT_KER));
+		conv_ctx.p_fix_bias = shared_malloc(no_outputs * sizeof(FIX_KER));
 
 #ifdef TEST_MULTICORE
 		int quo, rem, core;
@@ -129,9 +132,9 @@ TEST_STATUS_E test_conv_layer() {
 		conv_ctx.no_maps[0] = conv_ctx.conv_info.no_outputs;
 		conv_ctx.start_map[0] = 0;
 #endif
-		p_ref_flt_output = ext_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
-		p_flt_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
-		p_fix_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
+		p_ref_flt_output = shared_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
+		p_flt_input = shared_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
+		p_fix_input = shared_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
 
 		// random input
 		generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
@@ -148,10 +151,14 @@ TEST_STATUS_E test_conv_layer() {
 				rotate_180(conv_ctx.p_fix_ker + omap * no_inputs * K * K + map * K * K, K, K);
 			}
 		}
+		// Write the updated structure back to MSMC since it is cached. and release the semaphore.
+		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	} else {
+		// wait for all init to get over.
+		while(!CSL_semIsFree(INIT_DONE_SEM));
+		CACHE_wbInvAllL1d(CACHE_WAIT);
 	}
-	// wait for all init to get over.
-	while(!CSL_semIsFree(INIT_DONE_SEM));
 
 #ifdef TEST_MULTICORE
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
@@ -160,6 +167,7 @@ TEST_STATUS_E test_conv_layer() {
 		dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 	}
 #endif
+	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
@@ -172,10 +180,15 @@ TEST_STATUS_E test_conv_layer() {
 		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
 		completion_cnt = 0;
 		conv_ctx.lyr_arith_mode = FIXED_POINT;
+		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	} else {
+		while(!CSL_semIsFree(INIT_DONE_SEM));
+		//CACHE_wbAllL1d(CACHE_WAIT);
+		//CACHE_invAllL1d(CACHE_WAIT);
+		CACHE_wbInvAllL1d(CACHE_WAIT);
 	}
 
-	while(!CSL_semIsFree(INIT_DONE_SEM));
 
 #ifdef TEST_MULTICORE
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
@@ -185,7 +198,7 @@ TEST_STATUS_E test_conv_layer() {
 	}
 #endif
 
-	
+	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
@@ -193,7 +206,9 @@ TEST_STATUS_E test_conv_layer() {
 #ifdef TEST_MULTICORE
 	while(completion_cnt != NO_CORES);
 #endif
-
+	//CACHE_wbAllL1d(CACHE_WAIT);
+	//CACHE_invAllL1d(CACHE_WAIT);
+	CACHE_wbInvAllL1d(CACHE_WAIT);
 	//print_fix_img(conv_ctx.p_fix_output, out_height, out_width);
 	//print_float_img(conv_ctx.p_flt_output, out_height, out_width);
 	if(core_id == 0) {
@@ -201,7 +216,7 @@ TEST_STATUS_E test_conv_layer() {
 	
 		compute_conv_ref(&conv_ctx, p_flt_input);
 		//print_float_img(p_ref_flt_output, out_height, out_width);
-	
+
 		status = compare_conv_out(&conv_ctx, conv_ctx.p_flt_output);
 		check_cmp_status(&status);
 	
@@ -210,20 +225,20 @@ TEST_STATUS_E test_conv_layer() {
 		//print_float_img(conv_ctx.p_flt_output, out_height, out_width);
 		check_cmp_status(&status);
 	
-		ext_free(conv_ctx.p_flt_output);
-		ext_free(conv_ctx.p_fix_output);
-		ext_free(conv_ctx.p_flt_ker);
-		ext_free(conv_ctx.p_fix_ker);
-		ext_free(conv_ctx.p_flt_bias);
-		ext_free(conv_ctx.p_fix_bias);
-		ext_free(p_ref_flt_output);
-		ext_free(p_fix_input);
-		ext_free(p_flt_input);
+		shared_free(conv_ctx.p_flt_output);
+		shared_free(conv_ctx.p_fix_output);
+		shared_free(conv_ctx.p_flt_ker);
+		shared_free(conv_ctx.p_fix_ker);
+		shared_free(conv_ctx.p_flt_bias);
+		shared_free(conv_ctx.p_fix_bias);
+		shared_free(p_ref_flt_output);
+		shared_free(p_fix_input);
+		shared_free(p_flt_input);
 		reset_mem_manager();
 		completion_cnt = 0;
 		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 	}
 	while(!CSL_semIsFree(DATA_SYNC_SEM));
-	while(!CSL_semIsFree(INIT_DONE_SEM));
+
 	return status.flag;
 }

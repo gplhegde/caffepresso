@@ -124,8 +124,9 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			break;
 		case 7:
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
-
-			new_width = in_width - ker_size + 1;
+			// TODO: Not tested for this kernel size
+			REL_ASSERT(1 == 0);
+			new_width = in_width - 6;
 			new_width = ((new_width & 0x7) == 0)? new_width : (new_width + 8 - new_width % 8);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
@@ -153,7 +154,8 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			break;
 		case 11:
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
-
+			// TODO: Not tested for this kernel size
+			REL_ASSERT(1 == 0);
 			new_width = in_width - ker_size + 1;
 			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + 4 - new_width % 4);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -218,14 +220,11 @@ STATUS_E dsp_flt_conv_layer(FLT_MAP *p_input,	// pointer to input maps stored in
 				for(imap = 0; imap < no_inputs; imap++){
 					for(kr = 0; kr < ker_size; kr++) {
 						for(kc = 0; kc < ker_size; kc++){
-							sum += p_weight[((omap * no_inputs + imap) * ker_size + kr) * ker_size + kc] * 
-								p_input[(imap * in_height + row + kr) * in_width + col + kc];
-
+							sum += p_weight[((omap * no_inputs + imap) * ker_size + kr) * ker_size + kc] * p_input[(imap * in_height + row + kr) * in_width + col + kc];
 						}
 					}
 				}
 				sum += p_bias[omap];
-				//p_output[(omap * o_h + row/stride) * o_w + col/stride] = sum;
 				p_output[omap * o_h * o_w + o_w * (row / stride) + (col / stride)] = sum;
 			}
 		}
@@ -251,7 +250,7 @@ STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_
 			p_conv_ctx->conv_info.ker_size,
 			p_conv_ctx->conv_info.stride,
 			p_conv_ctx->conv_info.no_ker_frac_bits,
-			p_conv_ctx->p_fix_output // TODO: add offset corresponding to this core.
+			p_conv_ctx->p_fix_output
 			);
 	} else {
 		status = dsp_flt_conv_layer(p_flt_in_maps,

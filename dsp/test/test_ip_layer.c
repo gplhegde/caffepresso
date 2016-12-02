@@ -1,6 +1,8 @@
+#include <stdio.h>
 #include "unit_test.h"
 #include "inner_prod_layer.h"
 #include <ti/csl/csl_semAux.h>
+#include <ti/csl/csl_cacheAux.h>
 #include "misc_utils.h"
 #include <math.h>
 
@@ -16,7 +18,7 @@ extern FIX_MAP far *p_fix_input;
 
 extern FLT_MAP far *p_ref_flt_output;
 
-#pragma DATA_SECTION(ip_ctx, ".sharedram")
+#pragma DATA_SECTION(ip_ctx, ".shared_ocm")
 IP_LYR_CTX_T far ip_ctx;
 
 void compute_ip_ref(IP_LYR_CTX_T *p_ctx, FLT_MAP *p_flt_input) {
@@ -41,6 +43,7 @@ CMP_STATUS_T compare_ip_out(IP_LYR_CTX_T *p_ctx, FLT_MAP *pOutput) {
 
 	for(out = 0; out < p_ctx->ip_info.no_outputs; out++) {
 		if(fabs(pOutput[out] - p_ref_flt_output[out]) > ERR_THRESHOLD) {
+			printf("Act: %f\tRef: %f\n", pOutput[out], p_ref_flt_output[out]);
 			status.mis_map = 1;
 			status.mis_row = 1;
 			status.mis_col = out;
@@ -59,8 +62,8 @@ TEST_STATUS_E test_ip_layer() {
 	status.flag = TEST_PASS;
 
 	if(core_id == 0) {
-		no_inputs = 64;
-		no_outputs = 160;
+		no_inputs = 32;
+		no_outputs = 64;
 		no_map_frac_bits = 11;
 		no_ker_frac_bits = 11;
 	
@@ -70,12 +73,12 @@ TEST_STATUS_E test_ip_layer() {
 		ip_ctx.start_map[0] = 0;
 	
 		// input and output buffer allocation	
-		ip_ctx.p_flt_output = ext_malloc(no_outputs * sizeof(FLT_MAP));
-		ip_ctx.p_fix_output = ext_malloc(no_outputs * sizeof(FIX_MAP));
-		ip_ctx.p_flt_weight = ext_malloc(no_inputs * no_outputs * sizeof(FLT_KER));
-		ip_ctx.p_fix_weight = ext_malloc(no_inputs * no_outputs * sizeof(FIX_KER));
-		ip_ctx.p_flt_bias = ext_malloc(no_outputs *sizeof(FLT_KER));
-		ip_ctx.p_fix_bias = ext_malloc(no_outputs *sizeof(FIX_KER));
+		ip_ctx.p_flt_output = shared_malloc(no_outputs * sizeof(FLT_MAP));
+		ip_ctx.p_fix_output = shared_malloc(no_outputs * sizeof(FIX_MAP));
+		ip_ctx.p_flt_weight = shared_malloc(no_inputs * no_outputs * sizeof(FLT_KER));
+		ip_ctx.p_fix_weight = shared_malloc(no_inputs * no_outputs * sizeof(FIX_KER));
+		ip_ctx.p_flt_bias = shared_malloc(no_outputs *sizeof(FLT_KER));
+		ip_ctx.p_fix_bias = shared_malloc(no_outputs *sizeof(FIX_KER));
 #ifdef TEST_MULTICORE
 		int quo, rem, core, map;
 		quo = ip_ctx.ip_info.no_outputs / NO_CORES;
@@ -98,9 +101,9 @@ TEST_STATUS_E test_ip_layer() {
 		ip_ctx.no_maps[0] = ip_ctx.ip_info.no_outputs;
 		ip_ctx.start_map[0] = 0;
 #endif	
-		p_ref_flt_output = ext_malloc(no_outputs * sizeof(FLT_MAP));
-		p_flt_input = ext_malloc(no_inputs * sizeof(FLT_MAP));
-		p_fix_input = ext_malloc(no_inputs * sizeof(FIX_MAP));
+		p_ref_flt_output = shared_malloc(no_outputs * sizeof(FLT_MAP));
+		p_flt_input = shared_malloc(no_inputs * sizeof(FLT_MAP));
+		p_fix_input = shared_malloc(no_inputs * sizeof(FIX_MAP));
 	
 		// random input
 		generate_random_data(p_flt_input, no_inputs, 123);
@@ -110,16 +113,24 @@ TEST_STATUS_E test_ip_layer() {
 		float_to_fix_data(p_flt_input, no_inputs, no_map_frac_bits, p_fix_input);
 		float_to_fix_data(ip_ctx.p_flt_weight, no_inputs * no_outputs, no_ker_frac_bits, ip_ctx.p_fix_weight);
 		float_to_fix_data(ip_ctx.p_flt_bias, no_outputs, no_map_frac_bits, ip_ctx.p_fix_bias);
+		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	} else {
+
+		while(!CSL_semIsFree(INIT_DONE_SEM));
+		CACHE_wbInvAllL1d(CACHE_WAIT);
 	}
-	while(!CSL_semIsFree(INIT_DONE_SEM));
-#ifdef TEST_MULTICORE	
+
+#ifdef TEST_MULTICORE
+
 	dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
+
 #else
 	if(core_id == 0) {
 		dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 	}
 #endif
+	CACHE_wbAllL1d(CACHE_WAIT);
 
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
@@ -128,14 +139,17 @@ TEST_STATUS_E test_ip_layer() {
 #ifdef TEST_MULTICORE
 	while(completion_cnt != NO_CORES);
 #endif
+
 	if(core_id == 0) {
-		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
 		completion_cnt = 0;
-		ip_ctx.lyr_arith_mode = FIXED_POINT;	
-		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+		ip_ctx.lyr_arith_mode = FIXED_POINT;
+		CACHE_wbAllL1d(CACHE_WAIT);
+	} else {
+		do {
+			CACHE_invAllL1d(CACHE_WAIT);
+		}
+		while(ip_ctx.lyr_arith_mode != FIXED_POINT);
 	}
-	
-	while(!CSL_semIsFree(INIT_DONE_SEM));
 	
 #ifdef TEST_MULTICORE	
 	dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
@@ -143,7 +157,8 @@ TEST_STATUS_E test_ip_layer() {
 	if(core_id == 0) {
 		dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 	}
-#endif	
+#endif
+	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
@@ -151,6 +166,9 @@ TEST_STATUS_E test_ip_layer() {
 #ifdef TEST_MULTICORE
 	while(completion_cnt != NO_CORES);
 #endif
+
+	CACHE_invAllL1d(CACHE_WAIT);
+
 
 	if(core_id == 0) {
 		//print_float_img(ip_ctx.p_flt_output, 1, no_outputs);
@@ -165,17 +183,17 @@ TEST_STATUS_E test_ip_layer() {
 		//print_float_img(ip_ctx.p_flt_output, 1, no_outputs);
 		//print_fix_img(ip_ctx.p_fix_output, 1, no_outputs);
 		status = compare_ip_out(&ip_ctx, ip_ctx.p_flt_output);
-		check_cmp_status(&status);	
+		check_cmp_status(&status);
 	
-		ext_free(ip_ctx.p_flt_output);
-		ext_free(ip_ctx.p_fix_output);
-		ext_free(ip_ctx.p_flt_weight);
-		ext_free(ip_ctx.p_fix_weight);
-		ext_free(ip_ctx.p_flt_bias);
-		ext_free(ip_ctx.p_fix_bias);
-		ext_free(p_ref_flt_output);
-		ext_free(p_fix_input);
-		ext_free(p_flt_input);
+		shared_free(ip_ctx.p_flt_output);
+		shared_free(ip_ctx.p_fix_output);
+		shared_free(ip_ctx.p_flt_weight);
+		shared_free(ip_ctx.p_fix_weight);
+		shared_free(ip_ctx.p_flt_bias);
+		shared_free(ip_ctx.p_fix_bias);
+		shared_free(p_ref_flt_output);
+		shared_free(p_fix_input);
+		shared_free(p_flt_input);
 
 		reset_mem_manager();
 		completion_cnt = 0;

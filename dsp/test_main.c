@@ -37,8 +37,11 @@ void dsp_init() {
 	CSL_tscEnable();
 	// We will not use L2 cache. We will manage L2 RAM to keep local variables specific to the core.
 	CACHE_setL2Size (CACHE_0KCACHE);
-	// Use L1 D cache
-	CACHE_setL1DSize(CACHE_L1_32KCACHE);
+
+	// Use L1 D cache fully
+	//CACHE_setL1DSize(CACHE_L1_32KCACHE);
+	CACHE_setL1DSize(CACHE_0KCACHE);
+
 	// Disable caching for starting 16MB DDR(refer to the API)
 	CACHE_disableCaching (128);
 }
@@ -55,9 +58,7 @@ void main(void) {
 
 	test_layers();
 
-	printf("Application complete\n");
-
-	while(1);
+	printf("%d : Application complete\n", core_id);
 }
 
 

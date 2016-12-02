@@ -2,9 +2,12 @@
 #include "unit_test.h"
 #include "pool_layer.h"
 #include <ti/csl/csl_semAux.h>
+#include <ti/csl/csl_cacheAux.h>
 #include <float.h>
 #include "misc_utils.h"
+#include "mem_manager.h"
 #include <math.h>
+#include "c6x.h"
 
 extern unsigned int core_id;
 extern unsigned int far completion_cnt;
@@ -13,7 +16,7 @@ extern FLT_MAP far *p_flt_input;
 extern FIX_MAP far *p_fix_input;
 extern FLT_MAP far *p_ref_flt_output;
 
-#pragma DATA_SECTION(pool_ctx, ".sharedram")
+#pragma DATA_SECTION(pool_ctx, ".shared_ocm")
 POOL_LYR_CTX_T far pool_ctx;
 
 void compute_pool_ref(POOL_LYR_CTX_T *p_ctx, FLT_MAP *p_flt_input) {
@@ -79,7 +82,7 @@ TEST_STATUS_E test_pool_layer() {
 
 	if(core_id == 0) {
 		completion_cnt = 0;
-		no_inputs = 3;
+		no_inputs = 10;
 		input_height = 17;
 		input_width = 17;
 		win_size = 2;
@@ -115,20 +118,23 @@ TEST_STATUS_E test_pool_layer() {
 		pool_ctx.start_map[0] = 0;
 #endif	
 		// input and output buffer allocation	
-		pool_ctx.p_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
-		pool_ctx.p_fix_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FIX_MAP));
-		p_ref_flt_output = ext_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
-		p_flt_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
-		p_fix_input = ext_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
+		pool_ctx.p_flt_output = shared_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
+		pool_ctx.p_fix_output = shared_malloc(out_height * out_width * no_inputs * sizeof(FIX_MAP));
+		p_ref_flt_output = shared_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
+		p_flt_input = shared_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
+		p_fix_input = shared_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FIX_MAP));
 	
 		// random input
 		generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
 		float_to_fix_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 14, p_fix_input);
+
+		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 		printf("Released sem\n");
+	} else {
+		while(!CSL_semIsFree(INIT_DONE_SEM));
+		CACHE_wbInvAllL1d(CACHE_WAIT);
 	}
-	// wait for all init to get over.
-	while(!CSL_semIsFree(INIT_DONE_SEM));
 
 #ifdef TEST_MULTICORE	
 	// compute floating point output
@@ -139,6 +145,7 @@ TEST_STATUS_E test_pool_layer() {
 	}
 #endif
 
+	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
@@ -152,11 +159,12 @@ TEST_STATUS_E test_pool_layer() {
 		// compute fixed point scalar output
 		pool_ctx.lyr_arith_mode = FIXED_POINT;
 		completion_cnt = 0;
+		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+	} else {
+		while(!CSL_semIsFree(INIT_DONE_SEM));
+		CACHE_wbInvAllL1d(CACHE_WAIT);
 	}
-
-	while(!CSL_semIsFree(INIT_DONE_SEM));
-
 #ifdef TEST_MULTICORE	
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
@@ -165,14 +173,16 @@ TEST_STATUS_E test_pool_layer() {
 		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 	}
 #endif
-	
+	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 	completion_cnt++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 	
 #ifdef TEST_MULTICORE
 	while(completion_cnt != NO_CORES);
-#endif	
+#endif
+
+	CACHE_wbInvAllL1d(CACHE_WAIT);
 	if(core_id == 0) {
 		while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
 		// compute reference output from the pooling function defined in this file
@@ -188,15 +198,16 @@ TEST_STATUS_E test_pool_layer() {
 		check_cmp_status(&status);
 	
 	
-		ext_free(pool_ctx.p_flt_output);
-		ext_free(pool_ctx.p_fix_output);
-		ext_free(p_ref_flt_output);
-		ext_free(p_fix_input);
-		ext_free(p_flt_input);
+		shared_free(pool_ctx.p_flt_output);
+		shared_free(pool_ctx.p_fix_output);
+		shared_free(p_ref_flt_output);
+		shared_free(p_fix_input);
+		shared_free(p_flt_input);
 		reset_mem_manager();
 		completion_cnt = 0;
 		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 	}
 	while(!CSL_semIsFree(DATA_SYNC_SEM));
+
 	return status.flag;
 }

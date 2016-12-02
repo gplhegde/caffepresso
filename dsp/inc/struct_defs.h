@@ -69,7 +69,7 @@ typedef struct {
 	int mis_map;
 	int mis_row;
 	int mis_col;
-	STATUS_E flag;
+	TEST_STATUS_E flag;
 } CMP_STATUS_T;
 //=============================================================
 

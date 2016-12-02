@@ -30,13 +30,13 @@
 // FIXME: base should be move to the end of .local_ram segment in linker script. Currently an offset of 0x30000 is used looking at map file.
 #define L2_PRIVATE_SRAM_BASE 	(CSL_C66X_COREPAC_LOCAL_L2_SRAM_REGS + 0x30000)
 #define L2_PRIVATE_SRAM_END		(L2_PRIVATE_SRAM_BASE + L2_SRAM_SIZE - 1)
-#define MSMC_SHARED_SRAM_BASE 	(CSL_MSMC_SRAM_REGS)
+#define MSMC_SHARED_SRAM_BASE 	(CSL_MSMC_SRAM_REGS + 0x400)
 #define MSMC_SHARED_SRAM_END	(CSL_MSMC_SRAM_REGS + MSMC_SRAM_SIZE - 1)
 // FIXME: based should be moved to some offset since the network model is stored in .sharedram which is on DDR as well
 #define DDR_SHARED_DRAM_BASE		(CSL_DDR3_0_DATA + 0x1000000)	// keeping a safe offset of 16MB for the network model(FC layers).
 #define DDR_SHARED_DRAM_END		(CSL_DDR3_0_DATA + (DDR_RAM_SIZE - 1))
 
-static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE + 0x400;
+static char *p_shared_cur_free = (char *)MSMC_SHARED_SRAM_BASE;
 void * shared_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;

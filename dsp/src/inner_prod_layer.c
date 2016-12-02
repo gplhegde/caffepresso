@@ -1,5 +1,6 @@
 #include "inner_prod_layer.h"
 #include "struct_defs.h"
+#include <stdio.h>
 
 extern unsigned int core_id;
 
