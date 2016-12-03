@@ -64,7 +64,6 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 
 	// FIXME: All the APIs from IMGLIB rotates the kernel 180 deg. We need to pre-rotate all the weights and
 	// store in prior to nullify this effect.
-
 	switch(ker_size) {
 		case 3:
 			// The output width for  IMG_conv_3x3_i16s_c16s API must be multiple of 2.

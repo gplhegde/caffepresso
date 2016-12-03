@@ -83,7 +83,7 @@ void print_float_img(FLT_MAP *p_img, int H, int W) {
 	DBG_INFO("-------------------------------------\n");
     for (r = 0; r < H; r++) {
         for (c = 0; c < W; c++) {
-            printf("%E\t", p_img[r * W + c]);
+            printf("%f\t", p_img[r * W + c]);
         }
         printf("\n");
     }
@@ -221,12 +221,12 @@ void rotate_180(FIX_KER *mat, int M, int N) {
 
 void check_cmp_status(CMP_STATUS_T *p_status) {
 	if(p_status->flag == TEST_PASS) {
-		printf("PASSED\n");
+		printf("\nPASSED\n");
 	} else {
 		printf("Data mismatch occured\n");
 		printf("Map: %d\tRow: %d\tCol: %d\n", p_status->mis_map, p_status->mis_row, p_status->mis_col);
-		printf("TEST FAILED\n");
-		exit(-1);
+		printf("\nTEST FAILED\n");
+		//exit(-1);
 	}
 
 }

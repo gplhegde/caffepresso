@@ -17,16 +17,17 @@
 // CPU ID. This is local to each core since we are storing this in local RAM.
 unsigned int core_id;
 
-#pragma DATA_SECTION(completion_cnt, ".sharedram")
-unsigned int completion_cnt;
 
-#pragma DATA_SECTION(p_flt_input, ".sharedram")
+#pragma DATA_SECTION(completion_cnt, ".shared_ocm")
+unsigned int completion_cnt[2];
+
+#pragma DATA_SECTION(p_flt_input, ".shared_ocm")
 FLT_MAP *p_flt_input;
 
-#pragma DATA_SECTION(p_fix_input, ".sharedram")
+#pragma DATA_SECTION(p_fix_input, ".shared_ocm")
 FIX_MAP *p_fix_input;
 
-#pragma DATA_SECTION(p_ref_flt_output, ".sharedram")
+#pragma DATA_SECTION(p_ref_flt_output, ".shared_ocm")
 FLT_MAP *p_ref_flt_output;
 
 int test_layers();
@@ -35,16 +36,20 @@ void dsp_init() {
 
 	// Enable timers for profiling.
 	CSL_tscEnable();
+
 	// We will not use L2 cache. We will manage L2 RAM to keep local variables specific to the core.
 	CACHE_setL2Size (CACHE_0KCACHE);
 
 	// Use L1 D cache fully
-	//CACHE_setL1DSize(CACHE_L1_32KCACHE);
-	CACHE_setL1DSize(CACHE_0KCACHE);
+	CACHE_setL1DSize(CACHE_L1_32KCACHE);
 
 	// Disable caching for starting 16MB DDR(refer to the API)
 	CACHE_disableCaching (128);
+
+	// Setting write through mode for MSMC RAM for time being instead of disabling the L1D cache completely.
+	CACHE_setMemRegionWritethrough(12, TRUE);
 }
+
 void main(void) {
 
 	if(DNUM == 0) {
@@ -60,7 +65,6 @@ void main(void) {
 
 	printf("%d : Application complete\n", core_id);
 }
-
 
 int test_layers() {
 	TEST_STATUS_E status;

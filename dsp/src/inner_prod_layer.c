@@ -75,7 +75,6 @@ STATUS_E dsp_flt_ip_layer(FLT_MAP *p_input,	// pointer to input features
 	) {
 	int n;
 	STATUS_E status = FAILED;
-	
 
 	for ( n = 0; n < no_outputs; n++) {
 		// TODO: Use DSPLIB APIs like DSPF_sp_dotprod for this

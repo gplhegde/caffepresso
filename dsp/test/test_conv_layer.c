@@ -7,15 +7,12 @@
 #include <stdio.h>
 #include <math.h>
 
-
 #pragma DATA_SECTION(conv_ctx, ".shared_ocm")
-//#pragma DATA_SECTION(conv_ctx, ".sharedram")
 CONV_LYR_CTX_T far conv_ctx;
-
 
 extern unsigned int core_id;
 
-extern unsigned int far completion_cnt;
+extern unsigned int far completion_cnt[2];
 
 extern FLT_MAP far *p_flt_input;
 
@@ -85,7 +82,8 @@ TEST_STATUS_E test_conv_layer() {
 
 	status.flag = TEST_PASS;
 	if(core_id == 0) {
-		completion_cnt = 0;
+		completion_cnt[0] = 0;
+		completion_cnt[1] = 0;
 		no_inputs = 1;
 		no_outputs = 20;
 		input_height = 28;
@@ -129,8 +127,8 @@ TEST_STATUS_E test_conv_layer() {
 			}
 		}
 #else
-		conv_ctx.no_maps[0] = conv_ctx.conv_info.no_outputs;
-		conv_ctx.start_map[0] = 0;
+		conv_ctx.no_maps[MASTER_CORE_ID] = conv_ctx.conv_info.no_outputs;
+		conv_ctx.start_map[MASTER_CORE_ID] = 0;
 #endif
 		p_ref_flt_output = shared_malloc(out_height * out_width * no_outputs * sizeof(FLT_MAP));
 		p_flt_input = shared_malloc((input_height + 2*pad)*(input_width + 2*pad) * no_inputs * sizeof(FLT_MAP));
@@ -167,28 +165,28 @@ TEST_STATUS_E test_conv_layer() {
 		dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 	}
 #endif
-	CACHE_wbAllL1d(CACHE_WAIT);
+
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
-	completion_cnt++;
+	CACHE_invAllL1d(CACHE_WAIT);
+	completion_cnt[0]++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 
 #ifdef TEST_MULTICORE
-	while(completion_cnt != NO_CORES);
+	// wait for all cores to complete computations
+	do {
+		CACHE_invAllL1d(CACHE_WAIT);
+	}while(completion_cnt[0] != NO_CORES);
 #endif
 	
-	if(core_id == 0) {
-		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
-		completion_cnt = 0;
+	if(core_id == MASTER_CORE_ID) {
 		conv_ctx.lyr_arith_mode = FIXED_POINT;
-		CACHE_wbAllL1d(CACHE_WAIT);
-		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 	} else {
-		while(!CSL_semIsFree(INIT_DONE_SEM));
-		//CACHE_wbAllL1d(CACHE_WAIT);
-		//CACHE_invAllL1d(CACHE_WAIT);
-		CACHE_wbInvAllL1d(CACHE_WAIT);
+		do {
+			// invalidate cache to synch with the above data struct update by core 0
+			CACHE_invAllL1d(CACHE_WAIT);
+		}
+		while(conv_ctx.lyr_arith_mode != FIXED_POINT);
 	}
-
 
 #ifdef TEST_MULTICORE
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
@@ -198,21 +196,19 @@ TEST_STATUS_E test_conv_layer() {
 	}
 #endif
 
-	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
-	completion_cnt++;
+	CACHE_invAllL1d(CACHE_WAIT);
+	completion_cnt[1]++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 	
 #ifdef TEST_MULTICORE
-	while(completion_cnt != NO_CORES);
+	do {
+		CACHE_invAllL1d(CACHE_WAIT);
+	}while(completion_cnt[1] != NO_CORES);
 #endif
-	//CACHE_wbAllL1d(CACHE_WAIT);
-	//CACHE_invAllL1d(CACHE_WAIT);
-	CACHE_wbInvAllL1d(CACHE_WAIT);
-	//print_fix_img(conv_ctx.p_fix_output, out_height, out_width);
-	//print_float_img(conv_ctx.p_flt_output, out_height, out_width);
-	if(core_id == 0) {
-		while(!CSL_semAcquireDirect(DATA_SYNC_SEM));	
+
+	if(core_id == MASTER_CORE_ID) {
+		CACHE_invAllL1d(CACHE_WAIT);
 	
 		compute_conv_ref(&conv_ctx, p_flt_input);
 		//print_float_img(p_ref_flt_output, out_height, out_width);
@@ -235,10 +231,9 @@ TEST_STATUS_E test_conv_layer() {
 		shared_free(p_fix_input);
 		shared_free(p_flt_input);
 		reset_mem_manager();
-		completion_cnt = 0;
-		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+		completion_cnt[0] = 0;
+		completion_cnt[1] = 0;
 	}
-	while(!CSL_semIsFree(DATA_SYNC_SEM));
 
 	return status.flag;
 }

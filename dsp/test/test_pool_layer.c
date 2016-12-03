@@ -10,7 +10,7 @@
 #include "c6x.h"
 
 extern unsigned int core_id;
-extern unsigned int far completion_cnt;
+extern unsigned int far completion_cnt[2];
 extern FLT_MAP far *p_ref_flt_output;
 extern FLT_MAP far *p_flt_input;
 extern FIX_MAP far *p_fix_input;
@@ -75,14 +75,16 @@ CMP_STATUS_T compare_pool_out(POOL_LYR_CTX_T *p_ctx, FLT_MAP *pOutput) {
 
 TEST_STATUS_E test_pool_layer() {
 	int no_inputs, input_height, input_width, win_size, stride, pad;
-	int out_width, out_height;
+	int out_width, out_height, no_frac_bits;
 	POOL_TYPE_E pool_type;
 	CMP_STATUS_T status;
 	status.flag = TEST_PASS;
 
-	if(core_id == 0) {
-		completion_cnt = 0;
+	if(core_id == MASTER_CORE_ID) {
+		completion_cnt[0] = 0;
+		completion_cnt[1] = 0;
 		no_inputs = 10;
+		no_frac_bits = 14;
 		input_height = 17;
 		input_width = 17;
 		win_size = 2;
@@ -94,6 +96,7 @@ TEST_STATUS_E test_pool_layer() {
 		out_width = (input_width + 2*pad - win_size + 1 + stride - 1)/ stride;
 		// populate pool layer context
 		pool_ctx.pool_info = (POOL_INFO_T){input_height, input_width, no_inputs, no_inputs, win_size, stride, pad, pool_type};
+
 		pool_ctx.lyr_arith_mode = FLOAT_POINT;
 #ifdef TEST_MULTICORE
 		int quo, rem, core, map;
@@ -114,8 +117,8 @@ TEST_STATUS_E test_pool_layer() {
 			}
 		}
 #else
-		pool_ctx.no_maps[0] = pool_ctx.pool_info.no_outputs;
-		pool_ctx.start_map[0] = 0;
+		pool_ctx.no_maps[MASTER_CORE_ID] = pool_ctx.pool_info.no_outputs;
+		pool_ctx.start_map[MASTER_CORE_ID] = 0;
 #endif	
 		// input and output buffer allocation	
 		pool_ctx.p_flt_output = shared_malloc(out_height * out_width * no_inputs * sizeof(FLT_MAP));
@@ -126,11 +129,10 @@ TEST_STATUS_E test_pool_layer() {
 	
 		// random input
 		generate_random_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 123);
-		float_to_fix_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, 14, p_fix_input);
+		float_to_fix_data(p_flt_input, (input_height + 2*pad)*(input_width + 2*pad) * no_inputs, no_frac_bits, p_fix_input);
 
 		CACHE_wbAllL1d(CACHE_WAIT);
 		CSL_semReleaseSemaphore(INIT_DONE_SEM);
-		printf("Released sem\n");
 	} else {
 		while(!CSL_semIsFree(INIT_DONE_SEM));
 		CACHE_wbInvAllL1d(CACHE_WAIT);
@@ -140,51 +142,58 @@ TEST_STATUS_E test_pool_layer() {
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 #else
-	if(core_id == 0) {
+	if(core_id == MASTER_CORE_ID) {
 		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 	}
 #endif
 
-	CACHE_wbAllL1d(CACHE_WAIT);
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
-	completion_cnt++;
+	// make sure that all cores read updated count value. So we need invalidation here.
+	CACHE_invAllL1d(CACHE_WAIT);
+	completion_cnt[0]++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 
 #ifdef TEST_MULTICORE
-	while(completion_cnt != NO_CORES);
+	// wait for all cores to complete computations
+	do {
+		CACHE_invAllL1d(CACHE_WAIT);
+	}while(completion_cnt[0] != NO_CORES);
 #endif
 
-	if(core_id == 0) {
-		while(!CSL_semAcquireDirect(INIT_DONE_SEM));		
-		// compute fixed point scalar output
+	if(core_id == MASTER_CORE_ID) {
 		pool_ctx.lyr_arith_mode = FIXED_POINT;
-		completion_cnt = 0;
-		CACHE_wbAllL1d(CACHE_WAIT);
-		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 	} else {
-		while(!CSL_semIsFree(INIT_DONE_SEM));
-		CACHE_wbInvAllL1d(CACHE_WAIT);
+		do {
+			// invalidate cache to synch with the above data struct update by core 0
+			CACHE_invAllL1d(CACHE_WAIT);
+		}
+		while(pool_ctx.lyr_arith_mode != FIXED_POINT);
 	}
+
 #ifdef TEST_MULTICORE	
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 #else
-	if(core_id == 0) {
+	if(core_id == MASTER_CORE_ID) {
 		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 	}
 #endif
-	CACHE_wbAllL1d(CACHE_WAIT);
+
 	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
-	completion_cnt++;
+	CACHE_invAllL1d(CACHE_WAIT);
+	completion_cnt[1]++;
 	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
 	
 #ifdef TEST_MULTICORE
-	while(completion_cnt != NO_CORES);
+	do {
+		CACHE_invAllL1d(CACHE_WAIT);
+	}while(completion_cnt[1] != NO_CORES);
 #endif
 
-	CACHE_wbInvAllL1d(CACHE_WAIT);
-	if(core_id == 0) {
-		while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+
+	if(core_id == MASTER_CORE_ID) {
+		CACHE_invAllL1d(CACHE_WAIT);
+
 		// compute reference output from the pooling function defined in this file
 		compute_pool_ref(&pool_ctx, p_flt_input);
 		//print_float_img(p_ref_flt_output + 1 * out_height * out_width, out_height, out_width);
@@ -192,11 +201,10 @@ TEST_STATUS_E test_pool_layer() {
 		status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
 		check_cmp_status(&status);
 	
-		fix16_to_float_data(pool_ctx.p_fix_output, out_height * out_width * no_inputs, 14, pool_ctx.p_flt_output);
+		fix16_to_float_data(pool_ctx.p_fix_output, out_height * out_width * no_inputs, no_frac_bits, pool_ctx.p_flt_output);
 		//print_float_img(pool_ctx.p_flt_output + 1 * out_height * out_width, out_height, out_width);
 		status = compare_pool_out(&pool_ctx, pool_ctx.p_flt_output);
 		check_cmp_status(&status);
-	
 	
 		shared_free(pool_ctx.p_flt_output);
 		shared_free(pool_ctx.p_fix_output);
@@ -204,10 +212,10 @@ TEST_STATUS_E test_pool_layer() {
 		shared_free(p_fix_input);
 		shared_free(p_flt_input);
 		reset_mem_manager();
-		completion_cnt = 0;
-		CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+		completion_cnt[0] = 0;
+		completion_cnt[1] = 0;
+
 	}
-	while(!CSL_semIsFree(DATA_SYNC_SEM));
 
 	return status.flag;
 }
