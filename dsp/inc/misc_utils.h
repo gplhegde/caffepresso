@@ -37,4 +37,5 @@ void generate_random_data(float *p_data, int N, int seed);
 void rotate_180(FIX_KER *mat, int M, int N);
 
 void check_cmp_status(CMP_STATUS_T *p_status);
+void print_layer_node_ctx(CNN_LYR_NODE_T *p_lyr_nodes, int no_layers);
 #endif // _TEST_UTILITY_H_

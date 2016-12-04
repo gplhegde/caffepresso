@@ -30,6 +30,8 @@ typedef struct {
 //=============================================================
 // Convolution layer context
 typedef struct {
+	// layer arithmetic mode. floating point or fixed point
+	LYR_ARITH_MODE_E lyr_arith_mode;	// This must be the first member
 	// Floating point output map buffer for this layer.
 	FLT_MAP *p_flt_output;
 	// Fixed point output map buffer for this layer.
@@ -42,8 +44,6 @@ typedef struct {
 	FLT_KER *p_flt_bias;
 	// Fixed point bias buffer
 	FIX_KER *p_fix_bias;
-	// layer arithmetic mode. floating point or fixed point
-	LYR_ARITH_MODE_E lyr_arith_mode;
 	// starting output map assigned to this core. this number is zero based
 	uint16_t start_map[NO_CORES];
 	// number of output maps assigned to this core.

@@ -21,12 +21,12 @@ typedef struct {
 //========================================
 // Activation layer context
 typedef struct {
+	// Arithmetic mode to be used to compute the output. float/fixed point
+	LYR_ARITH_MODE_E lyr_arith_mode; // This must be the first member
 	// Floating point output map buffer for this layer.
 	FLT_MAP *p_flt_output;
 	// Fixed point output map buffer for this layer.
 	FIX_MAP *p_fix_output;
-	// Arithmetic mode to be used to compute the output. float/fixed point
-	LYR_ARITH_MODE_E lyr_arith_mode;
 	// start map/node
 	uint16_t start_map[NO_CORES];
 	// number of assigned maps or output nodes assigned to this core.

@@ -10,7 +10,8 @@ extern uint32_t *p_shared_dbuff2;
 // Array of CNN nodes. Each node will contain layer type and a pointer to context of the corresponding layer.
 // Put this list of pointers on local_memory. The actual layer specific context is allocated on shared memory which
 // is initialized by Master core.
-#pragma DATA_SECTION(g_cnn_layer_nodes, ".local_ram")
+#pragma DATA_ALIGN   (g_cnn_layer_nodes, L1_CACHE_LINE_SIZE)
+#pragma DATA_SECTION(g_cnn_layer_nodes, ".shared_ocm")
 CNN_LYR_NODE_T g_cnn_layer_nodes[NO_DEEP_LAYERS];
 
 

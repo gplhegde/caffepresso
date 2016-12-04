@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include "conv_layer.h"
 #include "pool_layer.h"
+#include "cnn_layers.h"
+
+extern unsigned int core_id;
 
 float mean_normalize(uint8_t *p_img, int H, int W, float *var, float *p_norm_img){
 	uint32_t sum, pixel;
@@ -221,14 +224,69 @@ void rotate_180(FIX_KER *mat, int M, int N) {
 
 void check_cmp_status(CMP_STATUS_T *p_status) {
 	if(p_status->flag == TEST_PASS) {
-		printf("\nPASSED\n");
+		printf("PASSED\n");
 	} else {
 		printf("Data mismatch occured\n");
 		printf("Map: %d\tRow: %d\tCol: %d\n", p_status->mis_map, p_status->mis_row, p_status->mis_col);
-		printf("\nTEST FAILED\n");
-		//exit(-1);
+		printf("TEST FAILED\n");
+		exit(-1);
 	}
 
+}
+
+void print_layer_node_ctx(CNN_LYR_NODE_T *p_lyr_nodes, int no_layers) {
+	int lyr;
+	IP_LYR_CTX_T *p_ip_ctx;
+	CONV_LYR_CTX_T *p_conv_ctx;
+	POOL_LYR_CTX_T *p_pool_ctx;
+	ACT_LYR_CTX_T *p_act_ctx;
+	SMAX_LYR_CTX_T *p_smax_ctx; 
+	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
+
+	printf("\n==================================================\n");
+	printf("Per core workload for all layers : CORE %d\n", core_id);
+	for (lyr = 0; lyr < no_layers; lyr++) {
+		switch(p_node->lyr_type) {
+			case CONV:
+				p_conv_ctx = (CONV_LYR_CTX_T *)p_node->p_lyr_ctx;
+				printf("\n----- Layer %d\tType : CONV -----\n", lyr);
+				printf("Shape : (%d, %d, %d, %d)", p_conv_ctx->conv_info.no_outputs, p_conv_ctx->conv_info.no_inputs,
+					p_conv_ctx->conv_info.map_h, p_conv_ctx->conv_info.map_w);
+				printf("Start map : %d\tNo maps : %d\n", p_conv_ctx->start_map[core_id], p_conv_ctx->no_maps[core_id]);
+
+				break;
+			case POOL:
+				p_pool_ctx = (POOL_LYR_CTX_T *)p_node->p_lyr_ctx;
+				printf("\n----- Layer %d\tType : POOL -----\n", lyr);
+				printf("Shape : (%d, %d, %d, %d)", p_pool_ctx->pool_info.no_outputs, p_pool_ctx->pool_info.no_inputs,
+						p_pool_ctx->pool_info.map_h, p_pool_ctx->pool_info.map_w);
+				printf("Start map : %d\tNo maps : %d\n", p_pool_ctx->start_map[core_id], p_pool_ctx->no_maps[core_id]);
+				
+				break;
+			case ACT:
+				p_act_ctx = (ACT_LYR_CTX_T *)p_node->p_lyr_ctx;
+				printf("\n----- Layer %d\tType : ACT -----\n", lyr);
+				printf("Shape : (%d, %d, %d, %d)", p_act_ctx->act_info.no_outputs, p_act_ctx->act_info.no_inputs,
+						p_act_ctx->act_info.map_h, p_act_ctx->act_info.map_w);
+				printf("Start map : %d\tNo maps : %d\n", p_act_ctx->start_map[core_id], p_act_ctx->no_maps[core_id]);
+				break;
+			case INNER_PROD:
+				p_ip_ctx = (IP_LYR_CTX_T *)p_node->p_lyr_ctx;
+				printf("\n----- Layer %d\tType : INNER_PROD -----\n", lyr);
+				printf("Shape : (%d, %d, %d, %d)", p_ip_ctx->ip_info.no_outputs, p_ip_ctx->ip_info.no_inputs,
+						p_ip_ctx->ip_info.map_h, p_ip_ctx->ip_info.map_w);
+				printf("Start map : %d\tNo maps : %d\n", p_ip_ctx->start_map[core_id], p_ip_ctx->no_maps[core_id]);
+				break;
+			case SOFTMAX:
+				p_smax_ctx = (SMAX_LYR_CTX_T *)p_node->p_lyr_ctx;
+				printf("\n----- Layer %d\tType : SOFTMAX -----\n", lyr);
+				break;
+			default:
+				break;
+		}
+		p_node++;
+	}
+	printf("\n==================================================\n");
 }
 
 

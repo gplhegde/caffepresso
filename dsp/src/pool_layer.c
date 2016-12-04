@@ -4,8 +4,6 @@
 
 extern unsigned int core_id;
 
-
-
 STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	int in_height,			// input feature map height
 	int in_width,			// input feature map width

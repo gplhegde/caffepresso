@@ -16,15 +16,22 @@ uint32_t *p_shared_dbuff2;
 
 STATUS_E init_conv_kernels(CONV_LYR_CTX_T *p_conv_ctx) {
 
-	int k, i;
+	int omap, imap;
 
 	// convert kernels to fix point
-	for ( i = 0; i < p_conv_ctx->conv_info.no_inputs; i++) {
-		for (k = 0; k < p_conv_ctx->conv_info.no_outputs; k++) {
-			float_to_fix_data(p_conv_ctx->p_flt_ker + (i * p_conv_ctx->conv_info.no_outputs + k) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
+	for (omap = 0; omap < p_conv_ctx->conv_info.no_outputs; omap++) {
+		for (imap = 0; imap < p_conv_ctx->conv_info.no_inputs; imap++) {
+			float_to_fix_data(p_conv_ctx->p_flt_ker + (omap * p_conv_ctx->conv_info.no_inputs + imap) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
 				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
 				p_conv_ctx->conv_info.no_ker_frac_bits,
-				p_conv_ctx->p_fix_ker + (i * p_conv_ctx->conv_info.no_outputs + k) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size);
+				p_conv_ctx->p_fix_ker + (omap * p_conv_ctx->conv_info.no_inputs + imap) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size);
+		}
+	}
+	// rotate the fixed point kernel to compensate for the 180 deg rotation performed by the IMGLIB APIs
+	for(omap = 0; omap < p_conv_ctx->conv_info.no_outputs; omap++) {
+		for(imap = 0; imap < p_conv_ctx->conv_info.no_inputs; imap++) {
+			rotate_180(p_conv_ctx->p_fix_ker + (omap * p_conv_ctx->conv_info.no_inputs + imap) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
+				p_conv_ctx->conv_info.ker_size, p_conv_ctx->conv_info.ker_size);
 		}
 	}
 	// Init bias of conv layer.
@@ -84,7 +91,7 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 		case INNER_PROD:
 		{
 			IP_LYR_CTX_T *p_ip_ctx = (IP_LYR_CTX_T *)p_lyr_ctx;
-			// FIXME: replace malloc with custom malloc to allocate memory in on-chip memory.
+
 			if ((NULL == (p_ip_ctx->p_fix_weight = (FIX_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs *
 				p_ip_ctx->ip_info.no_inputs * sizeof(FIX_KER)))) ||
 				(NULL == (p_ip_ctx->p_fix_bias = (FIX_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs * sizeof(FIX_KER))))) {
@@ -113,7 +120,7 @@ STATUS_E caffe_cnn_layer_mem_free(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyrType) {
 		case CONV:
 		{
 			CONV_LYR_CTX_T *p_conv_ctx = (CONV_LYR_CTX_T *)p_lyr_ctx;
-			// FIXME: use custom free()
+
 			shared_free(p_conv_ctx->p_fix_bias);
 			shared_free(p_conv_ctx->p_fix_ker);
 			break;
@@ -121,7 +128,7 @@ STATUS_E caffe_cnn_layer_mem_free(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyrType) {
 		case INNER_PROD:
 		{
 			IP_LYR_CTX_T *p_ip_ctx = (IP_LYR_CTX_T *)p_lyr_ctx;
-			// FIXME: use custom free()
+
 			ext_free(p_ip_ctx->p_fix_weight);
 			ext_free(p_ip_ctx->p_fix_bias);
 			break;

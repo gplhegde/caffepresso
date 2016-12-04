@@ -5,7 +5,9 @@
 #include "debug_control.h"
 #include "cnn_app.h"
 #include "app_init.h"
+#include "misc_utils.h"
 #include "caffe_proto_params.h"
+#include "data_sync.h"
 
 #ifndef DEVICE_K2H
 #error "Device not specified"
@@ -13,6 +15,7 @@
 #include <ti/csl/cslr_device.h>
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_tsc.h>
+#include <ti/csl/csl_chip.h>
 #include <ti/csl/csl_cacheAux.h>
 #include "c6x.h"
 
@@ -20,25 +23,30 @@
 // CPU ID. This is local to each core since we are storing this in local RAM.
 unsigned int core_id;
 
+#define PRINT_WORKLOAD_PARAMS	(1)
+
 void dsp_init() {
 
 	// Enable timers for profiling.
 	CSL_tscEnable();
+
 	// We will not use L2 cache. We will manage L2 RAM to keep local variables specific to the core.
 	CACHE_setL2Size (CACHE_0KCACHE);
+
 	// Use L1 D cache
 	CACHE_setL1DSize(CACHE_L1_32KCACHE);
+
 	// Disable caching for starting 16MB DDR(refer to the API)
 	CACHE_disableCaching (128);
-	// L2 RAM is local to the core. Hence each core will clear their own L2 RAMs
-	//memset((void*)L2_HEAP_BASE, 0x0, L2_HEAP_SIZE);
+
+	// Set cache write-through mode for MSMC RAM region
+	CACHE_setMemRegionWritethrough(12, TRUE);
 }
 
 void main_init() {
 	// Reset the MSMC RAM
-	memset((void*)MSMC_REG_BASE, 0x0, MSMC_SRAM_SIZE);
-	// Just reset the semaphore.
-	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	//memset((void*)MSMC_REG_BASE, 0x0, MSMC_SRAM_SIZE);
+
 	// Init the main framework
 	main_cnn_app_init();
 }
@@ -47,32 +55,51 @@ int main() {
 	uint8_t *p_image;
 	int label, img_width, img_height;
 
-	core_id = DNUM;
+	core_id = CSL_chipReadReg(CSL_CHIP_DNUM);
+
+	get_global_sync_obj();
+
+	if(core_id != MASTER_CORE_ID) {
+		REL_INFO("C_%d : Waiting for global config to finish\n", core_id);
+		wait_global_config();
+	}
+
 	// init core specific HW
 	dsp_init();
 	
-	// perform main DNN framework and context init.
-	// Only master core is going to perform this.
+
 	if(core_id == MASTER_CORE_ID) {
-		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
+		// Reset semaphore module
+		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
+
+		// CNN specific shared context init
 		main_init();
-		CSL_semReleaseSemaphore(INIT_DONE_SEM);
+
+		// init global sync object and tell other cores to go and perform local init
+		flag_global_config_done();
 	}
 
-	// wait for all init to get over.
-	while(!CSL_semIsFree(INIT_DONE_SEM));
-	//main_cnn_app(pImage, &label);
+	flag_local_config_done();
+
+	wait_all_locall_config();
+
+	if(PRINT_WORKLOAD_PARAMS) {
+		print_layer_node_ctx(g_cnn_layer_nodes, NO_DEEP_LAYERS);
+	}
+
+	// TODO: Do  Input image init, normalization. Only by the master core.
+
+	// run the main application
+	main_cnn_app(p_image, &label);
 
 
 	if(core_id == MASTER_CORE_ID) {
-		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
-		REL_INFO("Relesaing buffers\n");
+		REL_INFO("C_%d : Relesaing resources\n", core_id);
+		// Release all resources and cleanup
 		cnn_app_memfree();
-		CSL_semReleaseSemaphore(INIT_DONE_SEM);
 	}
 
-	while(!CSL_semIsFree(INIT_DONE_SEM));
-	printf("Application complete\n");
+	REL_INFO("C_%d : Application complete\n", core_id);
 
 	return 0;
 }

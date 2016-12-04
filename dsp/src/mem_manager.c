@@ -41,8 +41,6 @@ void * shared_malloc(size_t size) {
 	uint32_t no_blocks;
 	char *p_new_free, *ptr;
 
-
-
 	no_blocks = (size + MSMC_ALIGNMENT - 1) / MSMC_ALIGNMENT;
 	p_new_free = p_shared_cur_free + no_blocks * MSMC_ALIGNMENT;
 
