@@ -10,7 +10,9 @@
  *	synchronised using HW semaphores.
  *
  */
+#pragma DATA_SECTION(p_shared_dbuff1, ".shared_ocm")
 uint32_t *p_shared_dbuff1;
+#pragma DATA_SECTION(p_shared_dbuff2, ".shared_ocm")
 uint32_t *p_shared_dbuff2;
 
 

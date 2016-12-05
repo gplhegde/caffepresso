@@ -2,6 +2,7 @@
 #include "debug_control.h"
 #include <math.h>
 #include <stdlib.h>
+#include <float.h>
 #include "conv_layer.h"
 #include "pool_layer.h"
 #include "cnn_layers.h"
@@ -30,6 +31,20 @@ float mean_normalize(uint8_t *p_img, int H, int W, float *var, float *p_norm_img
 	}
 	
 	return mean;
+}
+
+uint32_t find_max_index(FLT_MAP *p_array, int N) {
+	// TODO: See if there exists any API for this in DSPLIB
+	int i;
+	float max_val = -FLT_MAX;
+	uint32_t max_loc = -1;
+	for(i = 0; i < N; i++) {
+		if(p_array[i] > max_val) {
+			max_val = p_array[i];
+			max_loc = i;
+		}
+	}
+	return max_loc;
 }
 
 void float_to_fix_data(FLT_MAP *p_flt_data, int N, int frac_bits, FIX_MAP *p_fix_data) {

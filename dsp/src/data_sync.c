@@ -114,7 +114,7 @@ void flag_local_config_done() {
 	CSL_semReleaseSemaphore (SHARED_MEM_SEM);
 }
 
-void wait_all_locall_config() {
+void wait_all_local_config() {
 	uint32_t local_cfg_done;
 
 	do {
@@ -123,11 +123,15 @@ void wait_all_locall_config() {
 }
 
 void signal_lyr_completion(uint32_t nn_lyr) {
+	SYNC_MEMBER_E member;
+
+	member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0: SEM_LYR_SYNC_1;
 	// take the lock
 	while ((CSL_semAcquireDirect (SHARED_MEM_SEM)) == 0);
 
 	// FIXME: Need to invalidate L1D before reading and incrementing?
-	p_sync_obj->sem_lyr_sync[nn_lyr % 2]++;
+	p_sync_obj->sem_lyr_sync[nn_lyr % 2] = get_sync_member(member) + 1;
+
 
 	// write back the updated counter
 	// write back is not required if the shared data struct is placed on memory segment for which

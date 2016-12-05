@@ -72,13 +72,15 @@ void flag_global_config_done();
 
 void flag_local_config_done();
 
-void wait_all_locall_config();
+void wait_all_local_config();
 
 void signal_lyr_completion(uint32_t nn_lyr);
 
 void wait_for_maps(uint32_t nn_lyr);
 
 void reset_layer_sync_cntr(uint32_t nn_lyr);
+
+void wait_for_image_init(uint32_t img_cnt);
 
 void toggle_image_init_flag(uint32_t img_cnt);
 

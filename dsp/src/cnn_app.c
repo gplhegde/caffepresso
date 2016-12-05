@@ -10,13 +10,13 @@
 #include "sim_image.h"
 #endif // CNN_SIMULATOR
 
-extern uint32_t *p_shared_dbuff1;
+extern uint32_t far *p_shared_dbuff1;
 extern unsigned int core_id;
 
 
-STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
+STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	uint32_t nn_lyr;
-
+	int no_outputs;
 	CNN_LAYER_TYPE_E lyr_type;
 
 	CONV_LYR_CTX_T *p_conv_ctx;
@@ -26,10 +26,10 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 	SMAX_LYR_CTX_T *p_smax_ctx;
 	FIX_MAP *p_fix_input;
 	FLT_MAP *p_float_input;
-	int prev_map_h, prev_map_w, prev_nmaps;
+	int prev_map_h, prev_map_w, prev_nmaps, prev_frac_bits;
 	float var;
-	int prev_arith_mode, prev_frac_bits;
-	uint64_t start_time;
+	LYR_ARITH_MODE_E prev_arith_mode;
+
 	STATUS_E status = SUCCESS;
 	static uint32_t image_cnt = 0;
 
@@ -47,19 +47,17 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 		wait_for_image_init(image_cnt);
 	} else {
 		// mean and contrast normalization
-		//mean_normalize(p_image, prev_map_h * prev_nmaps, prev_map_w, &var, p_float_input);
-		//float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
+		mean_normalize(p_image, prev_map_h * prev_nmaps, prev_map_w, &var, p_float_input);
+		float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
 		toggle_image_init_flag(image_cnt);
 	}
-
-	prev_arith_mode = FLOAT_POINT;
 	
 	nn_lyr = 0;
 	lyr_type = g_cnn_layer_nodes[nn_lyr].lyr_type;
 
 	// main processing loop
 	while(nn_lyr < NO_DEEP_LAYERS) {
-
+		printf("C_%d : Layer %d start\n", core_id, nn_lyr);
 		switch(lyr_type) {
 			case CONV:
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -71,7 +69,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				p_fix_input = p_conv_ctx->p_fix_output;
 				p_float_input = p_conv_ctx->p_flt_output;
 				prev_arith_mode = p_conv_ctx->lyr_arith_mode;
-
+				prev_frac_bits = p_conv_ctx->conv_info.no_map_frac_bits;
 				break;
 			case POOL:
 				DBG_INFO("pool layer start\n");
@@ -82,7 +80,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				p_fix_input = p_pool_ctx->p_fix_output;
 				p_float_input = p_pool_ctx->p_flt_output;
 				prev_arith_mode = p_pool_ctx->lyr_arith_mode;
-
 				break;
 			case ACT:
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -100,15 +97,23 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 				p_fix_input = p_ip_ctx->p_fix_output;
 				p_float_input = p_ip_ctx->p_flt_output;
 				prev_arith_mode = p_ip_ctx->lyr_arith_mode;
+				prev_frac_bits = p_ip_ctx->ip_info.no_map_frac_bits;
 				break;
 			case SOFTMAX:
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
 
 				// only master core performs final softmax layer.
 				if(core_id == MASTER_CORE_ID) {
-					dsp_smax_layer(p_smax_ctx, p_float_input);
+					if(prev_arith_mode == FIXED_POINT) {
+						fix16_to_float_data(p_fix_input, p_smax_ctx->no_inputs, prev_frac_bits, p_smax_ctx->p_float_output);
+						// softmax layer supports in-place computations. Hence input and output buffers can be same.
+						dsp_smax_layer(p_smax_ctx, p_smax_ctx->p_float_output);
+					} else {
+						dsp_smax_layer(p_smax_ctx, p_float_input);
+					}
 				}
 				p_float_input = p_smax_ctx->p_float_output;
+				no_outputs = p_smax_ctx->no_inputs;
 				break;
 			case DATA_CONVERSION:
 
@@ -130,19 +135,22 @@ STATUS_E main_cnn_app(uint8_t *p_image, int *p_label) {
 		}
 
 		// data conversion is necessary
-		if(prev_arith_mode != *((LYR_ARITH_MODE_E *)g_cnn_layer_nodes[nn_lyr + 1].p_lyr_ctx)) {
+		if((nn_lyr < NO_DEEP_LAYERS - 1) &&
+			(g_cnn_layer_nodes[nn_lyr + 1].lyr_type != SOFTMAX) &&
+			(prev_arith_mode != *((LYR_ARITH_MODE_E *)g_cnn_layer_nodes[nn_lyr + 1].p_lyr_ctx))) {
 			REL_INFO("Data conversion in between layers is not supported as of now\n");
 			return UNSUPPORTED_FEATURE;
 		} else {
 			nn_lyr++;
-			lyr_type = g_cnn_layer_nodes[nn_lyr].lyr_type;
+			lyr_type = g_cnn_layer_nodes[nn_lyr].lyr_type; // FIXME: harmless access beyond array
 		}
 	}
 
 	// reset the image init flag for this image
 	if(core_id == MASTER_CORE_ID) {
-		// TODO: take last layer output and find the max probability/label
-
+		printf("C_%d : Finding the class label\n", core_id);
+		*p_label = find_max_index(p_float_input, no_outputs);
+		printf("C_%d : Detected label = %d\n", core_id, *p_label);
 		toggle_image_init_flag(image_cnt);
 	}
 	image_cnt++;

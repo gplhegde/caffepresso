@@ -23,7 +23,7 @@
 // CPU ID. This is local to each core since we are storing this in local RAM.
 unsigned int core_id;
 
-#define PRINT_WORKLOAD_PARAMS	(1)
+#define PRINT_WORKLOAD_PARAMS	(0)
 
 void dsp_init() {
 
@@ -53,7 +53,7 @@ void main_init() {
 
 int main() {
 	uint8_t *p_image;
-	int label, img_width, img_height;
+	uint32_t label, img_width, img_height;
 
 	core_id = CSL_chipReadReg(CSL_CHIP_DNUM);
 
@@ -81,7 +81,7 @@ int main() {
 
 	flag_local_config_done();
 
-	wait_all_locall_config();
+	wait_all_local_config();
 
 	if(PRINT_WORKLOAD_PARAMS) {
 		print_layer_node_ctx(g_cnn_layer_nodes, NO_DEEP_LAYERS);
