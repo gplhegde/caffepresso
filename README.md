@@ -25,7 +25,7 @@ The framework is modularized so support for new hardware platforms is simple. It
 
 ### Building and running code ###
 
-The ConvNet configurations used in the paper are stored in **nets** folder. The code-generation scripts are in **caffe-proto** folders. 
+The ConvNet configurations used in the paper are stored in **nets** folder. The code-generation scripts are in **tools/caffe-proto** folders. 
 
 **gpu** -- This contains the scripts to run various ConvNets via Caffe + cuDNN on the Jetson TX1. It is a seamless experience and it will get your started right away.
 
