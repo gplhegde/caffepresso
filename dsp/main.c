@@ -8,7 +8,7 @@
 #include "misc_utils.h"
 #include "caffe_proto_params.h"
 #include "data_sync.h"
-
+#include "mnist_test_images.h"
 #ifndef DEVICE_K2H
 #error "Device not specified"
 #endif
@@ -53,7 +53,7 @@ void main_init() {
 
 int main() {
 	uint8_t *p_image;
-	uint32_t label, img_width, img_height;
+	uint32_t label, img_cnt;
 
 	core_id = CSL_chipReadReg(CSL_CHIP_DNUM);
 
@@ -89,9 +89,16 @@ int main() {
 
 	// TODO: Do  Input image init, normalization. Only by the master core.
 
-	// run the main application
-	main_cnn_app(p_image, &label);
+	for(img_cnt = 0; img_cnt < 10/*NO_TEST_IMAGES*/; img_cnt++) {
+		p_image = &mnist_image_data[img_cnt][0];
 
+		// run the main application
+		main_cnn_app(p_image, &label);
+
+		if(core_id == MASTER_CORE_ID) {
+			printf("C_%d : Detected label = %d\t Actual label = %d\n", core_id, label, mnist_image_labels[img_cnt]);
+		}
+	}
 
 	if(core_id == MASTER_CORE_ID) {
 		REL_INFO("C_%d : Relesaing resources\n", core_id);

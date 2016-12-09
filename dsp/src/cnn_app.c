@@ -11,6 +11,7 @@
 #endif // CNN_SIMULATOR
 
 extern uint32_t far *p_shared_dbuff1;
+extern uint32_t far *p_shared_dbuff2;
 extern unsigned int core_id;
 
 
@@ -46,9 +47,11 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 		// other cores wait for the image buffer to be initialized by the master
 		wait_for_image_init(image_cnt);
 	} else {
-		// mean and contrast normalization
-		mean_normalize(p_image, prev_map_h * prev_nmaps, prev_map_w, &var, p_float_input);
-		float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
+		// convert to 0 -> 0.99 data range
+		char_to_float_image(p_image, prev_nmaps, prev_map_h, prev_map_w, p_float_input);
+		// FIXME: seed to disable this when running FLOAT point more as both buffers are same
+		//float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
+		//print_float_img(p_float_input, prev_map_h, prev_map_w);
 		toggle_image_init_flag(image_cnt);
 	}
 	
@@ -57,7 +60,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 	// main processing loop
 	while(nn_lyr < NO_DEEP_LAYERS) {
-		printf("C_%d : Layer %d start\n", core_id, nn_lyr);
+		//printf("C_%d : Layer %d start\n", core_id, nn_lyr);
 		switch(lyr_type) {
 			case CONV:
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -128,12 +131,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 		// data synchronization btw layers
 		wait_for_maps(nn_lyr);
 
-		// reset the other counter
-		if(core_id == MASTER_CORE_ID) {
-			// NOTE: It is safe to assume that the next layer will take significant time compared to the counter reset time
-			reset_layer_sync_cntr(nn_lyr + 1);
-		}
-
 		// data conversion is necessary
 		if((nn_lyr < NO_DEEP_LAYERS - 1) &&
 			(g_cnn_layer_nodes[nn_lyr + 1].lyr_type != SOFTMAX) &&
@@ -148,9 +145,9 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 	// reset the image init flag for this image
 	if(core_id == MASTER_CORE_ID) {
-		printf("C_%d : Finding the class label\n", core_id);
+		//printf("C_%d : Finding the class label\n", core_id);
 		*p_label = find_max_index(p_float_input, no_outputs);
-		printf("C_%d : Detected label = %d\n", core_id, *p_label);
+		reset_layer_sync_cntr();
 		toggle_image_init_flag(image_cnt);
 	}
 	image_cnt++;

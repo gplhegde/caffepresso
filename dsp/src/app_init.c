@@ -39,13 +39,16 @@ STATUS_E init_conv_kernels(CONV_LYR_CTX_T *p_conv_ctx) {
 	// Init bias of conv layer.
 	float_to_fix_data(p_conv_ctx->p_flt_bias,
 		p_conv_ctx->conv_info.no_outputs,
-		p_conv_ctx->conv_info.no_ker_frac_bits,
+		p_conv_ctx->conv_info.no_map_frac_bits,
 		p_conv_ctx->p_fix_bias);
 	return SUCCESS;
 }
 
 STATUS_E init_ip_layer_params(IP_LYR_CTX_T *p_ip_ctx) {
-	
+	int n;
+	float_to_fix_data(p_ip_ctx->p_flt_weight, p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_inputs * p_ip_ctx->ip_info.no_outputs,
+			p_ip_ctx->ip_info.no_ker_frac_bits, p_ip_ctx->p_fix_weight);
+	float_to_fix_data(p_ip_ctx->p_flt_bias, p_ip_ctx->ip_info.no_outputs, p_ip_ctx->ip_info.no_map_frac_bits, p_ip_ctx->p_fix_bias);
 	return SUCCESS;
 }
 

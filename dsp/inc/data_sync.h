@@ -13,7 +13,7 @@
 #include <ti/csl/csl_cacheAux.h>
 #include <ti/csl/csl_semAux.h>
 #include "user_config.h"
-
+#include "caffe_proto_params.h"
 // This must be multiple of cache line size
 #define DATA_SYNC_OBJ_SIZE	(L1_CACHE_LINE_SIZE)
 
@@ -40,22 +40,19 @@ typedef struct {
 	uint32_t img_init_done[2];
 
 	// counting semaphores to perform data sync btw layers
-	uint32_t sem_lyr_sync[2];
+	uint32_t sem_lyr_sync[NO_DEEP_LAYERS];
 
 	/*
 	 * Add more flags here
 	 */
 
-	uint8_t invalid_mem;
 }SHARED_SYNC_OBJ_T;
 
 typedef enum {
 	GLOBAL_CFG_DONE = 0,
 	LOCAL_CFG_DONE,
-	IMAGE_INIT_DONE_0,
-	IMAGE_INIT_DONE_1,
-	SEM_LYR_SYNC_0,
-	SEM_LYR_SYNC_1,
+	IMAGE_INIT_DONE,
+	SEM_LYR_SYNC,
 	/*
 	 * Add more flags here
 	 */
@@ -78,7 +75,7 @@ void signal_lyr_completion(uint32_t nn_lyr);
 
 void wait_for_maps(uint32_t nn_lyr);
 
-void reset_layer_sync_cntr(uint32_t nn_lyr);
+void reset_layer_sync_cntr();
 
 void wait_for_image_init(uint32_t img_cnt);
 

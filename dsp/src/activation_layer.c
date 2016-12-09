@@ -28,8 +28,10 @@ STATUS_E dsp_fix_activation_layer(FIX_MAP *p_input,	// pointer to input features
         	// TODO: see if DSPLIB provides any intrinsic based implementation.
             for (pixel = 0; pixel < N; pixel++) {
             	// TODO: see if there are optimized way for this in DSP lib
-                if(p_output[pixel] < 0) {
+                if(p_input[pixel] < 0) {
                 	p_output[pixel] = 0;
+                } else {
+                	p_output[pixel] = p_input[pixel];
                 }
             }
             ret_status = SUCCESS;
@@ -70,8 +72,10 @@ STATUS_E dsp_flt_activation_layer(FLT_MAP *p_input,	// pointer to input features
 		case RELU:
 			for (pixel = 0; pixel < N; pixel++) {
             	// TODO: see if there are optimized way for this in DSP lib
-                if(p_output[pixel] < 0) {
+                if(p_input[pixel] < 0) {
                 	p_output[pixel] = 0;
+                } else {
+                	p_output[pixel] = p_input[pixel];
                 }
 			}
 			ret_status = SUCCESS;

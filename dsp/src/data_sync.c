@@ -6,6 +6,7 @@
  */
 #include "data_sync.h"
 #include "debug_control.h"
+#include "mem_manager.h"
 
 #if DATA_SYNC_OBJ_SIZE > L1_CACHE_LINE_SIZE
 #warning "Consider invalidating only necessary cache lines in shared sync object in get_sync_member() function"
@@ -21,7 +22,7 @@ uint8_t shared_sync_mem[DATA_SYNC_OBJ_SIZE];
 SHARED_SYNC_OBJ_T *p_sync_obj;
 
 
-static uint32_t get_sync_member(SYNC_MEMBER_E member) {
+static uint32_t get_sync_member(SYNC_MEMBER_E member, uint32_t index) {
 	uint32_t member_val;
 
 	// TODO: Instead of invalidating entire sync object, invalidate only necessary cache line
@@ -35,17 +36,11 @@ static uint32_t get_sync_member(SYNC_MEMBER_E member) {
 		case LOCAL_CFG_DONE:
 			member_val = (uint32_t)p_sync_obj->local_cfg_done;
 			break;
-		case IMAGE_INIT_DONE_0:
-			member_val = (uint32_t)p_sync_obj->img_init_done[0];
+		case IMAGE_INIT_DONE:
+			member_val = (uint32_t)p_sync_obj->img_init_done[index];
 			break;
-		case IMAGE_INIT_DONE_1:
-			member_val = (uint32_t)p_sync_obj->img_init_done[1];
-			break;
-		case SEM_LYR_SYNC_0:
-			member_val = (uint32_t)p_sync_obj->sem_lyr_sync[0];
-			break;
-		case SEM_LYR_SYNC_1:
-			member_val = (uint32_t)p_sync_obj->sem_lyr_sync[1];
+		case SEM_LYR_SYNC:
+			member_val = (uint32_t)p_sync_obj->sem_lyr_sync[index];
 			break;
 		/*
 		 * Add get value for extra members here
@@ -73,11 +68,11 @@ void flag_global_config_done() {
 
 	// reset the global sync object to zero
 	memset((void *)shared_sync_mem, 0, sizeof(shared_sync_mem));
-	p_sync_obj->local_cfg_done = 0;
+	/*p_sync_obj->local_cfg_done = 0;
 	p_sync_obj->sem_lyr_sync[0] = 0;
 	p_sync_obj->sem_lyr_sync[1] = 0;
 	p_sync_obj->img_init_done[0] = FALSE;
-	p_sync_obj->img_init_done[1] = FALSE;
+	p_sync_obj->img_init_done[1] = FALSE;*/
 	/*
 	 * Add reset for future flags here
 	 */
@@ -93,7 +88,7 @@ void wait_global_config() {
 	uint32_t global_cfg_done;
 
 	do {
-		global_cfg_done = (uint32_t) get_sync_member(GLOBAL_CFG_DONE);
+		global_cfg_done = (uint32_t) get_sync_member(GLOBAL_CFG_DONE, 0);
 	} while(!global_cfg_done);
 }
 
@@ -118,19 +113,19 @@ void wait_all_local_config() {
 	uint32_t local_cfg_done;
 
 	do {
-		local_cfg_done = (uint32_t) get_sync_member(LOCAL_CFG_DONE);
+		local_cfg_done = (uint32_t) get_sync_member(LOCAL_CFG_DONE, 0);
 	} while(local_cfg_done != NO_CORES);
 }
 
 void signal_lyr_completion(uint32_t nn_lyr) {
-	SYNC_MEMBER_E member;
+	//SYNC_MEMBER_E member;
 
-	member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0: SEM_LYR_SYNC_1;
+	//member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0: SEM_LYR_SYNC_1;
 	// take the lock
 	while ((CSL_semAcquireDirect (SHARED_MEM_SEM)) == 0);
 
 	// FIXME: Need to invalidate L1D before reading and incrementing?
-	p_sync_obj->sem_lyr_sync[nn_lyr % 2] = get_sync_member(member) + 1;
+	p_sync_obj->sem_lyr_sync[nn_lyr] = get_sync_member(SEM_LYR_SYNC, nn_lyr) + 1;
 
 
 	// write back the updated counter
@@ -144,22 +139,28 @@ void signal_lyr_completion(uint32_t nn_lyr) {
 
 void wait_for_maps(uint32_t nn_lyr) {
 	uint32_t sem_cnt;
-	SYNC_MEMBER_E member;
+	//SYNC_MEMBER_E member;
 
-	member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0 : SEM_LYR_SYNC_1;
+	//member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0 : SEM_LYR_SYNC_1;
 	do {
-		sem_cnt = (uint32_t) get_sync_member(member);
+		sem_cnt = (uint32_t) get_sync_member(SEM_LYR_SYNC, nn_lyr);
 	} while(sem_cnt != NO_CORES);
+
+	// invalidate all cached data from the map buffers in MSMC RAM except the shared data structures in the first 1KB region.
+	// this is because each core needs the output of all cores for the next layer.
+	L1_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
+
 }
 
 // This must be only called from the master core
-void reset_layer_sync_cntr(uint32_t nn_lyr) {
+void reset_layer_sync_cntr() {
 	// take the lock
 	// TODO: lock is not required since only master core resets these counters
 	while ((CSL_semAcquireDirect (SHARED_MEM_SEM)) == 0);
 
-	// need to reset the other semaphore that was used for previous layer
-	p_sync_obj->sem_lyr_sync[nn_lyr % 2] = 0;
+	// need to reset all counters btw two successive image inferences
+	memset((void *)p_sync_obj->sem_lyr_sync, 0, sizeof(p_sync_obj->sem_lyr_sync));
+	//p_sync_obj->sem_lyr_sync[nn_lyr] = 0;
 
 	// write back the updated counter
 	// write back is not required if the shared data struct is placed on memory segment for which
@@ -172,11 +173,11 @@ void reset_layer_sync_cntr(uint32_t nn_lyr) {
 
 void wait_for_image_init(uint32_t img_cnt) {
 	uint32_t flag;
-	SYNC_MEMBER_E member;
+	//SYNC_MEMBER_E member;
 
-	member = (img_cnt % 2) == 0 ? IMAGE_INIT_DONE_0 : IMAGE_INIT_DONE_1;
+	//member = (img_cnt % 2) == 0 ? IMAGE_INIT_DONE_0 : IMAGE_INIT_DONE_1;
 	do {
-		flag = (uint32_t) get_sync_member(member);
+		flag = (uint32_t) get_sync_member(IMAGE_INIT_DONE, (img_cnt % 2));
 	} while(!flag);
 }
 

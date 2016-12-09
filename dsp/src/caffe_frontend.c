@@ -138,20 +138,22 @@ void cnn_layer_internal_param_init(void) {
 	IP_LYR_CTX_T * p_ip_ctx;
 	SMAX_LYR_CTX_T *p_smax_ctx;
 	LYR_ARITH_MODE_E common_arith_mode;
-	int common_frac_bits;
+	int common_frac_bits, ker_frac_bits, map_frac_bits;
 
 	conv_lyr = 0;
 	ip_lyr = 0;
-	common_arith_mode = FIXED_POINT;
-	common_frac_bits = 11;
+	common_arith_mode = FLOAT_POINT;
+	common_frac_bits = 12;
+	ker_frac_bits = 15;
+	map_frac_bits = 8;
 	for( lyr = 0; lyr < NO_DEEP_LAYERS; lyr++) {
 		switch(g_cnn_layer_nodes[lyr].lyr_type) {
 
 			case CONV:
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				// TODO: These should come from user after analyzing the dynamic range of the weights and activations after training.
-				p_conv_ctx->conv_info.no_ker_frac_bits = common_frac_bits;
-				p_conv_ctx->conv_info.no_map_frac_bits = common_frac_bits;
+				p_conv_ctx->conv_info.no_ker_frac_bits = ker_frac_bits;
+				p_conv_ctx->conv_info.no_map_frac_bits = map_frac_bits;
 				p_conv_ctx->lyr_arith_mode = common_arith_mode;
 
 				// Pointer to conv weights and biases, taken from the big network model arrays.
@@ -170,8 +172,8 @@ void cnn_layer_internal_param_init(void) {
 			case INNER_PROD:
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				// TODO: These should come from user after analyzing the dynamic range of the weights and activations after training.
-				p_ip_ctx->ip_info.no_ker_frac_bits = common_frac_bits;
-				p_ip_ctx->ip_info.no_map_frac_bits = common_frac_bits;
+				p_ip_ctx->ip_info.no_ker_frac_bits = ker_frac_bits;
+				p_ip_ctx->ip_info.no_map_frac_bits = map_frac_bits;
 				p_ip_ctx->lyr_arith_mode = common_arith_mode;
 
 				// Pointer to FC layer weights and biases, taken from the big network model arrays.

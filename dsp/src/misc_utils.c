@@ -33,6 +33,13 @@ float mean_normalize(uint8_t *p_img, int H, int W, float *var, float *p_norm_img
 	return mean;
 }
 
+void char_to_float_image(uint8_t *p_char_img, int C, int H, int W, FLT_MAP *p_flt_img) {
+	int p;
+	for(p = 0; p < C * H * W; p++) {
+		p_flt_img[p] = (FLT_MAP)(p_char_img[p]/255.0);
+	}
+}
+
 uint32_t find_max_index(FLT_MAP *p_array, int N) {
 	// TODO: See if there exists any API for this in DSPLIB
 	int i;
@@ -101,7 +108,7 @@ void print_float_img(FLT_MAP *p_img, int H, int W) {
 	DBG_INFO("-------------------------------------\n");
     for (r = 0; r < H; r++) {
         for (c = 0; c < W; c++) {
-            printf("%f\t", p_img[r * W + c]);
+            printf("%.4f\t", p_img[r * W + c]);
         }
         printf("\n");
     }
