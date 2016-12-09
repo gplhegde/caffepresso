@@ -132,7 +132,7 @@ def dump_dataset(dataset, no_imgs):
     for attr in label_linker_attr:
         h_cfile.write(attr.format(var_name=label_array_name) + '\n')
 
-    h_cfile.write('const uint8_t {:s}[{:s}] = '.format(label_array_name, def_no_images) + '{\n')
+    h_cfile.write('const uint32_t {:s}[{:s}] = '.format(label_array_name, def_no_images) + '{\n')
     for i, l in enumerate(labels.reshape(-1).tolist()):
         if(i < len(labels) - 1):
             h_cfile.write('{:d}, '.format(l))
