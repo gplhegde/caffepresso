@@ -142,7 +142,12 @@ void cnn_layer_internal_param_init(void) {
 
 	conv_lyr = 0;
 	ip_lyr = 0;
-	common_arith_mode = FLOAT_POINT;
+	if(APP_ARITHMETIC_MODE) {
+		common_arith_mode = FIXED_POINT;
+	} else {
+		common_arith_mode = FLOAT_POINT;
+	}
+
 	common_frac_bits = 12;
 	ker_frac_bits = 15;
 	map_frac_bits = 8;

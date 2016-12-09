@@ -94,7 +94,8 @@ STATUS_E dsp_activation_layer(ACT_LYR_CTX_T *p_act_ctx, FLT_MAP *p_flt_in_maps, 
 	STATUS_E ret_status = FAILED;
 
 	N = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->no_maps[core_id];
-	buff_offset = core_id * p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->start_map[core_id];
+	buff_offset = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w * p_act_ctx->start_map[core_id];
+
     switch(p_act_ctx->lyr_arith_mode) {
         case FLOAT_POINT:
         	ret_status = dsp_flt_activation_layer(p_flt_in_maps + buff_offset,

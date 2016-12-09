@@ -11,7 +11,6 @@
 #endif // CNN_SIMULATOR
 
 extern uint32_t far *p_shared_dbuff1;
-extern uint32_t far *p_shared_dbuff2;
 extern unsigned int core_id;
 
 
@@ -28,7 +27,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	FIX_MAP *p_fix_input;
 	FLT_MAP *p_float_input;
 	int prev_map_h, prev_map_w, prev_nmaps, prev_frac_bits;
-	float var;
 	LYR_ARITH_MODE_E prev_arith_mode;
 
 	STATUS_E status = SUCCESS;
@@ -49,9 +47,10 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	} else {
 		// convert to 0 -> 0.99 data range
 		char_to_float_image(p_image, prev_nmaps, prev_map_h, prev_map_w, p_float_input);
-		// FIXME: seed to disable this when running FLOAT point more as both buffers are same
-		//float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
-		//print_float_img(p_float_input, prev_map_h, prev_map_w);
+
+		if(p_conv_ctx->lyr_arith_mode == FIXED_POINT) {
+			float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
+		}
 		toggle_image_init_flag(image_cnt);
 	}
 	
@@ -60,7 +59,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 	// main processing loop
 	while(nn_lyr < NO_DEEP_LAYERS) {
-		//printf("C_%d : Layer %d start\n", core_id, nn_lyr);
+
 		switch(lyr_type) {
 			case CONV:
 				p_conv_ctx = (CONV_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -75,7 +74,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				prev_frac_bits = p_conv_ctx->conv_info.no_map_frac_bits;
 				break;
 			case POOL:
-				DBG_INFO("pool layer start\n");
 				p_pool_ctx = (POOL_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
 
 				dsp_pool_layer(p_pool_ctx, p_float_input, p_fix_input);
@@ -83,6 +81,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				p_fix_input = p_pool_ctx->p_fix_output;
 				p_float_input = p_pool_ctx->p_flt_output;
 				prev_arith_mode = p_pool_ctx->lyr_arith_mode;
+
 				break;
 			case ACT:
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -97,10 +96,12 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
 
 				dsp_ip_layer(p_ip_ctx, p_float_input, p_fix_input);
+
 				p_fix_input = p_ip_ctx->p_fix_output;
 				p_float_input = p_ip_ctx->p_flt_output;
 				prev_arith_mode = p_ip_ctx->lyr_arith_mode;
 				prev_frac_bits = p_ip_ctx->ip_info.no_map_frac_bits;
+
 				break;
 			case SOFTMAX:
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
@@ -114,6 +115,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 					} else {
 						dsp_smax_layer(p_smax_ctx, p_float_input);
 					}
+					print_float_img(p_smax_ctx->p_float_output, 1, 10);
 				}
 				p_float_input = p_smax_ctx->p_float_output;
 				no_outputs = p_smax_ctx->no_inputs;
@@ -125,6 +127,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				REL_INFO("Unsupported layer\n");
 				return UNSUPPORTED_FEATURE;
 		}
+
 
 		signal_lyr_completion(nn_lyr);
 

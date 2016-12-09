@@ -6,6 +6,11 @@
 #ifndef _USER_CONFIG_H
 #define _USER_CONFIG_H
 
+/* Arithmetic mode for all layers except SOFTMAX layer
+ * 0 --> floating point
+ * 1 --> fixed point
+ */
+#define APP_ARITHMETIC_MODE		(1)
 // TODO: Get these directly from TI platform specific header files.
 #ifdef DEVICE_K2H
 
