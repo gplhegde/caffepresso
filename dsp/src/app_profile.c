@@ -6,11 +6,11 @@
 #define MAX_TIMER_CNT	(0xFFFFFFFFFFFFFFFF)
 #define DSP_FREQ_IN_MHZ			1400
 
-void GET_TIME(uint64_t *time) {
+void inline GET_TIME(uint64_t *time) {
 	*time = CSL_tscRead();
 }
 
-void PRINT_RUNTIME(char *disp_string, uint64_t start_time) {
+void PRINT_RUNTIME(uint64_t start_time) {
 	uint64_t end_time, total_time;
 	end_time = CSL_tscRead();
 
@@ -21,5 +21,5 @@ void PRINT_RUNTIME(char *disp_string, uint64_t start_time) {
 		total_time = end_time - start_time;
 	}
 
-	printf("%s = %f usec", disp_string, (float)total_time / DSP_FREQ_IN_MHZ);
+	printf("Runtime = %f usec\n", (float)total_time / DSP_FREQ_IN_MHZ);
 }

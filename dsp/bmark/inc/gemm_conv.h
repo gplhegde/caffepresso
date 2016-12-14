@@ -1,0 +1,33 @@
+/*
+ * gemm_conv.h
+ *
+ *  Created on: 13 Dec 2016
+ *      Author: Gopalakrishna Hegde
+ */
+
+#ifndef BMARK_INC_GEMM_CONV_H_
+#define BMARK_INC_GEMM_CONV_H_
+#include <stdint.h>
+#include "user_config.h"
+#include "struct_defs.h"
+
+// Output matrix row must be multiple of 2
+#define GEMM_CONV_IN_ROW_FACTOR	(2)
+
+#define GEMM_CONV_IN_COL_FACTOR	(2)
+
+#define GEMM_CONV_OUT_COL_FACTOR	(4)
+
+typedef struct {
+	FIX_MAP *p_input_1;
+	FIX_MAP *p_input_2;
+	FIX_MAP *p_output;
+	FIX_MAP *p_bias;
+	uint32_t r1;
+	uint32_t c1;
+	uint32_t c2;
+} GEMM_CTX_T;
+
+void run_gemm_conv_bmark();
+
+#endif /* BMARK_INC_GEMM_CONV_H_ */

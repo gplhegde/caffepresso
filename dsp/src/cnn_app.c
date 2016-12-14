@@ -18,7 +18,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	uint32_t nn_lyr;
 	int no_outputs;
 	CNN_LAYER_TYPE_E lyr_type;
-
+	uint64_t start_time;
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
 	ACT_LYR_CTX_T *p_act_ctx;
@@ -52,10 +52,15 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 			float_to_fix_data(p_float_input, prev_map_h * prev_nmaps * prev_map_w, p_conv_ctx->conv_info.no_map_frac_bits, p_fix_input);
 		}
 		toggle_image_init_flag(image_cnt);
+#ifdef DSP_PROFILE
+		GET_TIME(&start_time);
+#endif //DSP_PROFILE
 	}
 	
 	nn_lyr = 0;
 	lyr_type = g_cnn_layer_nodes[nn_lyr].lyr_type;
+
+
 
 	// main processing loop
 	while(nn_lyr < NO_DEEP_LAYERS) {
@@ -115,7 +120,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 					} else {
 						dsp_smax_layer(p_smax_ctx, p_float_input);
 					}
-					print_float_img(p_smax_ctx->p_float_output, 1, 10);
+					//print_float_img(p_smax_ctx->p_float_output, 1, 10);
 				}
 				p_float_input = p_smax_ctx->p_float_output;
 				no_outputs = p_smax_ctx->no_inputs;
@@ -145,6 +150,12 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 			lyr_type = g_cnn_layer_nodes[nn_lyr].lyr_type; // FIXME: harmless access beyond array
 		}
 	}
+
+#ifdef DSP_PROFILE
+	if(core_id == MASTER_CORE_ID) {
+		PRINT_RUNTIME(start_time);
+	}
+#endif // DSP_PROFILE
 
 	// reset the image init flag for this image
 	if(core_id == MASTER_CORE_ID) {

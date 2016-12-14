@@ -153,7 +153,6 @@ STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
 
 	for (lyr = 0; lyr < n_layers; lyr++) {
-		printf("Layer = %d\n", lyr);
 		buff_elements = caffe_cnn_layer_malloc(p_node->p_lyr_ctx, p_node->lyr_type);
 		if(max_buff_elements < buff_elements) {
 			max_buff_elements = buff_elements;
@@ -231,9 +230,8 @@ STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	CONV_LYR_CTX_T *p_conv_ctx;
 	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
 
-	REL_INFO("Initializing CNN model weights and biases\n");
+
 	for (lyr = 0; lyr < n_layers; lyr++) {
-		REL_INFO("Layer %d parameters are being initialized\n", lyr);
 		if(p_node->lyr_type == CONV) {
 			p_conv_ctx = (CONV_LYR_CTX_T *)p_node->p_lyr_ctx;
 			init_conv_kernels(p_conv_ctx);
@@ -344,19 +342,22 @@ STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 STATUS_E main_cnn_app_init() {
 	STATUS_E status = SUCCESS;
 
+	REL_INFO("Initializing network context...\n");
 	caffe_layer_ctx_init();
 
-
+	REL_INFO("Initializing internal context...\n");
 	cnn_layer_internal_param_init();
 
-
+	REL_INFO("Allocating buffers...\n");
 	cnn_app_malloc(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 
-
+	REL_INFO("Initializing CNN model weights and biases\n");
 	cnn_app_model_init(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 
-
 	// split the computation of maps across all cores.
+	REL_INFO("Performing workload distributing among %d cores\n", NO_CORES);
 	workload_sharing_config(g_cnn_layer_nodes, NO_DEEP_LAYERS);
+
+	REL_INFO("--------Init Complete--------\n");
 	return status;
 }

@@ -3,7 +3,8 @@
 #include "imglib.h"
 #include <string.h>
 #include "debug_control.h"
-#define MAX_FEATUE_MAP_WIDTH	256
+#include "mem_manager.h"
+
 
 extern unsigned int core_id;
 /* This is per core temporary buffer for storing 1 row output of the convolution.
@@ -12,7 +13,7 @@ extern unsigned int core_id;
  * This buffer is used to store the result of full convolution
  */
 #pragma DATA_SECTION(private_temp_buff, ".local_ram")
-static FIX_MAP private_temp_buff[MAX_FEATUE_MAP_WIDTH]; // FIXME: this array must be 32bit aligned which is a requirement for IMGLIB.
+uint8_t private_temp_buff[PRIVATE_TEMP_BUFF_SIZE]; // FIXME: this array must be 32bit aligned which is a requirement for IMGLIB.
 
 static inline void strided_move(FIX_MAP *p_input, int len, int stride) {
 	int col, i;
@@ -74,7 +75,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
 						//memcpy(private_temp_buff1, )
 						IMG_conv_3x3_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
-							private_temp_buff,
+								(FIX_MAP *)private_temp_buff,
 							new_width,
 							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
@@ -82,12 +83,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 							);
 						// throw unnecessary pixels to mimic column stride
 						if(stride != 1) {
-							strided_move(private_temp_buff, o_w, stride);
+							strided_move((FIX_MAP *)private_temp_buff, o_w, stride);
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
 						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, private_temp_buff, o_w);
+						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
 					}
 				}
 				// add bias
@@ -101,7 +102,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
 						IMG_conv_5x5_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
-							private_temp_buff,
+							(FIX_MAP *)private_temp_buff,
 							new_width - 4,
 							new_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
@@ -109,12 +110,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 							);
 						// throw unnecessary pixels
 						if(stride != 1) {
-							strided_move(private_temp_buff, o_w, stride);
+							strided_move((FIX_MAP *)private_temp_buff, o_w, stride);
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
 						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, private_temp_buff, o_w);
+						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
 					}
 				}
 				// add bias
@@ -131,7 +132,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
 						IMG_conv_7x7_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
-							private_temp_buff,
+							(FIX_MAP *)private_temp_buff,
 							new_width,
 							new_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
@@ -139,12 +140,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 							);
 						// throw unnecessary pixels
 						if(stride != 1) {
-							strided_move(private_temp_buff, o_w, stride);
+							strided_move((FIX_MAP *)private_temp_buff, o_w, stride);
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
 						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, private_temp_buff, o_w);
+						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
 					}
 				}
 				// add bias
@@ -161,7 +162,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
 						IMG_conv_11x11_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
-							private_temp_buff,
+							(FIX_MAP *)private_temp_buff,
 							new_width,
 							new_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
@@ -169,12 +170,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 							);
 						// throw unnecessary pixels
 						if(stride != 1) {
-							strided_move(private_temp_buff, o_w, stride);
+							strided_move((FIX_MAP *)private_temp_buff, o_w, stride);
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
 						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, private_temp_buff, o_w);
+						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
 					}
 				}
 				// add bias

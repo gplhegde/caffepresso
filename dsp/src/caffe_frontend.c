@@ -26,7 +26,6 @@ void caffe_layer_ctx_init() {
 	for (lyr = 0; lyr < NO_DEEP_LAYERS; lyr++) {
 		// First layer to be provided with input dimensions. Subsequent layer input dimensions are
 		// derived from this
-		REL_INFO("Reading parameter form layer no %d\n", lyr);
 		if(lyr == 0) {
 			n_maps = NO_INPUT_MAPS;
 			m_w = INPUT_IMG_WIDTH;

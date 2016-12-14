@@ -14,6 +14,7 @@
 // TODO: Get these directly from TI platform specific header files.
 #ifdef DEVICE_K2H
 
+// This must be 1 or multiple of 2
 #define NO_CORES 				8
 
 #define L1_CACHE_LINE_SIZE		64

@@ -3,6 +3,9 @@
 #include "debug_control.h"
 #include "unit_test.h"
 #include "misc_utils.h"
+#include "data_sync.h"
+#include "dsp_bmarks.h"
+
 
 #ifndef DEVICE_K2H
 #error "Device not specified"
@@ -10,8 +13,12 @@
 #include <ti/csl/cslr_device.h>
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_tsc.h>
+#include <ti/csl/csl_chip.h>
 #include <ti/csl/csl_cacheAux.h>
 #include "c6x.h"
+
+// unedf this to run the layer tests.
+#define RUN_BMARKS
 
 #pragma DATA_SECTION(core_id, ".local_ram")
 // CPU ID. This is local to each core since we are storing this in local RAM.
@@ -51,17 +58,44 @@ void dsp_init() {
 }
 
 void main(void) {
+	core_id = CSL_chipReadReg(CSL_CHIP_DNUM);
 
-	if(DNUM == 0) {
+#ifdef RUN_BMARKS
+	get_global_sync_obj();
+
+	if(core_id != MASTER_CORE_ID) {
+		REL_INFO("C_%d : Waiting for global config to finish\n", core_id);
+		wait_global_config();
+	}
+
+	// init core specific HW
+	dsp_init();
+
+
+	if(core_id == MASTER_CORE_ID) {
+		// Reset semaphore module
+		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
+
+		// init global sync object and tell other cores to go and perform local init
+		flag_global_config_done();
+	}
+
+	flag_local_config_done();
+
+	wait_all_local_config();
+
+	// run benchmarks
+	run_dsp_bmarks();
+
+#else
+	if(core_id == 0) {
 		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
 		printf("Sem reset\n");
 	}
-
-	core_id = DNUM;
-
-	dsp_init();
+	dsp_init();;
 
 	test_layers();
+#endif // RUN_BMARKS
 
 	printf("%d : Application complete\n", core_id);
 }

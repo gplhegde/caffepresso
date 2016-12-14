@@ -4,10 +4,10 @@
 
 extern unsigned int core_id;
 
-STATUS_E dsp_fix_activation_layer(FIX_MAP *p_input,	// pointer to input features
+STATUS_E dsp_fix_activation_layer(FIX_MAP * restrict p_input,	// pointer to input features
 	int N,				// total number of features(pixels) present in the input
 	ACT_TYPE_E act_type,// type of activation. ReLU, sigmoid, tanh
-	FIX_MAP *p_output	// pointer to output features. input size = output size
+	FIX_MAP * restrict p_output	// pointer to output features. input size = output size
 	) {
 
 	int pixel;

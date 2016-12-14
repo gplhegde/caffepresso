@@ -137,11 +137,11 @@ TEST_STATUS_E test_ip_layer() {
 	}
 #endif
 
-	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));
 	// make sure that all cores read updated count value. So we need invalidation here.
 	CACHE_invAllL1d(CACHE_WAIT);
 	completion_cnt[0]++;
-	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	CSL_semReleaseSemaphore(SHARED_MEM_SEM);
 	
 #ifdef TEST_MULTICORE
 	// wait for all cores to complete computations
@@ -168,10 +168,10 @@ TEST_STATUS_E test_ip_layer() {
 	}
 #endif
 
-	while(!CSL_semAcquireDirect(DATA_SYNC_SEM));
+	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));
 	CACHE_invAllL1d(CACHE_WAIT);
 	completion_cnt[1]++;
-	CSL_semReleaseSemaphore(DATA_SYNC_SEM);
+	CSL_semReleaseSemaphore(SHARED_MEM_SEM);
 	
 #ifdef TEST_MULTICORE
 	do {

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 
+#define DSP_PROFILE
 #define REL_INFO(ARGS...)	printf(ARGS)
 #define REL_ASSERT(ARGS...) assert(ARGS)
 
