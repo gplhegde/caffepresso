@@ -2,6 +2,7 @@
 #include "debug_control.h"
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <float.h>
 #include "conv_layer.h"
 #include "pool_layer.h"
@@ -52,6 +53,31 @@ uint32_t find_max_index(FLT_MAP *p_array, int N) {
 		}
 	}
 	return max_loc;
+}
+
+void get_fix_eye_matrix(FIX_MAP *p_mat, int R, int C) {
+	int r, c;
+	REL_ASSERT(R == C);
+	memset(p_mat, 0, R * C * sizeof(FIX_MAP));
+	for(r = 0; r < R; r++) {
+		for(c = 0; c < C; c++) {
+			if(r == c) {
+				p_mat[r * C + c] = 1;
+			}
+		}
+	}
+}
+void get_flt_eye_matrix(FLT_MAP *p_mat, int R, int C) {
+	int r, c;
+	REL_ASSERT(R == C);
+	memset(p_mat, 0, R * C * sizeof(FLT_MAP));
+	for(r = 0; r < R; r++) {
+		for(c = 0; c < C; c++) {
+			if(r == c) {
+				p_mat[r * C + c] = 1.0;
+			}
+		}
+	}
 }
 
 void float_to_fix_data(FLT_MAP *p_flt_data, int N, int frac_bits, FIX_MAP *p_fix_data) {

@@ -12,6 +12,10 @@ void char_to_float_image(uint8_t *p_char_img, int C, int H, int W, FLT_MAP *p_fl
 
 uint32_t find_max_index(FLT_MAP *p_array, int N);
 
+void get_fix_eye_matrix(FIX_MAP *p_mat, int R, int C);
+
+void get_flt_eye_matrix(FLT_MAP *p_mat, int R, int C);
+
 void float_to_fix_data(FLT_MAP *p_flt_data, int N, int frac_bits, FIX_MAP *p_fix_data);
 
 void print_org_img(uint8_t *p_img, int H, int W);

@@ -26,6 +26,8 @@ typedef struct {
 	uint32_t r1;
 	uint32_t c1;
 	uint32_t c2;
+	int no_map_frac_bits;
+	int no_ker_frac_bits;
 } GEMM_CTX_T;
 
 void run_gemm_conv_bmark();

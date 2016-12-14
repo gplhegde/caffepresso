@@ -173,12 +173,12 @@ void reset_layer_sync_cntr() {
 
 void wait_for_image_init(uint32_t img_cnt) {
 	uint32_t flag;
-	//SYNC_MEMBER_E member;
 
-	//member = (img_cnt % 2) == 0 ? IMAGE_INIT_DONE_0 : IMAGE_INIT_DONE_1;
 	do {
 		flag = (uint32_t) get_sync_member(IMAGE_INIT_DONE, (img_cnt % 2));
 	} while(!flag);
+	// Since master core has just updated the image buffer, invalidate cache.
+	L1_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
 }
 
 // This must be only called from the master core
