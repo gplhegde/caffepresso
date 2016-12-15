@@ -30,6 +30,8 @@ typedef struct {
 	int no_ker_frac_bits;
 } GEMM_CTX_T;
 
-void run_gemm_conv_bmark();
+void run_conv_bmark();
+
+void run_gemm_bmark();
 
 #endif /* BMARK_INC_GEMM_CONV_H_ */
