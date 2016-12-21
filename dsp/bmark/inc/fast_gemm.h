@@ -8,7 +8,9 @@
 #ifndef _FAST_GEMM_H_
 #define _FAST_GEMM_H_
 
+
 #define NO_GEMM_CORES	1
+#define MASTER_CORE_ID	0
 #define L1_SCRATCHPAD_SIZE		(16 * 1024)
 #define L2_SCRATCHPAD_SIZE		(256 * 1024)
 
