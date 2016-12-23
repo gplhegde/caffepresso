@@ -4,8 +4,10 @@
 #include "mem_manager.h"
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_cacheAux.h>
+#include <ti/csl/csl_tsc.h>
 #include <stdio.h>
 #include <math.h>
+#include "app_profile.h"
 
 #pragma DATA_SECTION(conv_ctx, ".shared_ocm")
 CONV_LYR_CTX_T far conv_ctx;
@@ -78,6 +80,7 @@ CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *p_ctx, FLT_MAP *p_output) {
 TEST_STATUS_E test_conv_layer() {
 	int no_inputs, no_outputs, input_height, input_width, K, stride, pad, k, i;
 	int out_width, out_height, no_map_frac_bits, no_ker_frac_bits, map, omap;
+	uint64_t start_time, end_time;
 	CMP_STATUS_T status;
 
 	status.flag = TEST_PASS;
@@ -88,7 +91,7 @@ TEST_STATUS_E test_conv_layer() {
 		no_outputs = 20;
 		input_height = 28;
 		input_width = 28;
-		K = 5;
+		K = 3;
 		stride = 1;
 		pad = 0;
 		no_map_frac_bits = 10;
@@ -161,9 +164,12 @@ TEST_STATUS_E test_conv_layer() {
 #ifdef TEST_MULTICORE
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == 0) {
 		dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FLOATING POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));
@@ -191,9 +197,12 @@ TEST_STATUS_E test_conv_layer() {
 #ifdef TEST_MULTICORE
 	dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == 0) {
 		dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FIXED POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));

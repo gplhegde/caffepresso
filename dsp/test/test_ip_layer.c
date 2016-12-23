@@ -3,9 +3,11 @@
 #include "inner_prod_layer.h"
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_cacheAux.h>
+#include <ti/csl/csl_tsc.h>
 #include "misc_utils.h"
 #include "mem_manager.h"
 #include <math.h>
+#include "app_profile.h"
 
 extern unsigned int core_id;
 
@@ -58,13 +60,14 @@ CMP_STATUS_T compare_ip_out(IP_LYR_CTX_T *p_ctx, FLT_MAP *pOutput) {
 TEST_STATUS_E test_ip_layer() {
 	int no_inputs, no_outputs;
 	int no_map_frac_bits, no_ker_frac_bits;
+	uint64_t start_time, end_time;
 	CMP_STATUS_T status;
 
 	status.flag = TEST_PASS;
 
 	if(core_id == MASTER_CORE_ID) {
-		no_inputs = 32;
-		no_outputs = 120;
+		no_inputs = 128;
+		no_outputs = 100;
 		no_map_frac_bits = 11;
 		no_ker_frac_bits = 11;
 		completion_cnt[0] = 0;
@@ -77,8 +80,9 @@ TEST_STATUS_E test_ip_layer() {
 		ip_ctx.p_fix_output = shared_malloc(no_outputs * sizeof(FIX_MAP));
 		memset(ip_ctx.p_flt_output, 0, no_outputs * sizeof(FLT_MAP));
 		memset(ip_ctx.p_fix_output, 0, no_outputs * sizeof(FIX_MAP));
-		ip_ctx.p_flt_weight = shared_malloc(no_inputs * no_outputs * sizeof(FLT_KER));
-		ip_ctx.p_fix_weight = shared_malloc(no_inputs * no_outputs * sizeof(FIX_KER));
+		// We cannot anyway store the FC weights on-chip even for MNIST, so put them in DDR
+		ip_ctx.p_flt_weight = ext_malloc(no_inputs * no_outputs * sizeof(FLT_KER));
+		ip_ctx.p_fix_weight = ext_malloc(no_inputs * no_outputs * sizeof(FIX_KER));
 
 		ip_ctx.p_flt_bias = shared_malloc(no_outputs *sizeof(FLT_KER));
 		ip_ctx.p_fix_bias = shared_malloc(no_outputs *sizeof(FIX_KER));
@@ -132,9 +136,12 @@ TEST_STATUS_E test_ip_layer() {
 #ifdef TEST_MULTICORE
 	dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == 0) {
 		dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FLOATING POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));
@@ -163,9 +170,12 @@ TEST_STATUS_E test_ip_layer() {
 #ifdef TEST_MULTICORE	
 	dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == 0) {
 		dsp_ip_layer(&ip_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FIXED POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));

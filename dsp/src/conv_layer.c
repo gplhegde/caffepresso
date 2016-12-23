@@ -1,10 +1,11 @@
 #include "conv_layer.h"
 #include "struct_defs.h"
 #include "imglib.h"
+#include "dsplib.h"
 #include <string.h>
 #include "debug_control.h"
 #include "mem_manager.h"
-
+#include "ext_dsplib.h"
 
 extern unsigned int core_id;
 /* This is per core temporary buffer for storing 1 row output of the convolution.
@@ -12,8 +13,12 @@ extern unsigned int core_id;
  * We use IMGLIB APIs to do full convolution and then discard pixels based on the stride.
  * This buffer is used to store the result of full convolution
  */
+#pragma DATA_ALIGN(private_temp_buff, 8);
 #pragma DATA_SECTION(private_temp_buff, ".local_ram")
-uint8_t private_temp_buff[PRIVATE_TEMP_BUFF_SIZE]; // FIXME: this array must be 32bit aligned which is a requirement for IMGLIB.
+uint8_t far private_temp_buff[PRIVATE_TEMP_BUFF_SIZE]; // FIXME: this array must be 32bit aligned which is a requirement for IMGLIB.
+#pragma DATA_ALIGN(private_conv_buff, 8);
+#pragma DATA_SECTION(private_conv_buff, ".local_ram")
+uint8_t private_conv_buff[PRIVATE_TEMP_BUFF_SIZE];
 
 static inline void strided_move(FIX_MAP *p_input, int len, int stride) {
 	int col, i;
@@ -38,6 +43,8 @@ static inline void dsp_vs_add(FIX_MAP *p_acc, FIX_MAP s, int len) {
 	}
 }
 
+
+
 STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
@@ -53,13 +60,13 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
 	) {
 
-	int o_h, o_w, omap, imap, row, new_width;
+	int o_h, o_w, omap, imap, row, new_width, o_w_x8;
 	STATUS_E status = FAILED;
 	o_h = (in_height - ker_size + 1 + stride - 1) / stride;
 	o_w = (in_width - ker_size + 1 + stride - 1) / stride;
 
-
-
+	// output width which is multiple of 8
+	o_w_x8 = o_w + (8 - o_w % 8);
 	// reset the output maps buffer; only the portion that belongs to this core.
 	memset(p_output + start_map * o_h * o_w, 0, o_h * o_w * no_maps * sizeof(FIX_MAP));
 
@@ -73,9 +80,8 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						//memcpy(private_temp_buff1, )
 						IMG_conv_3x3_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
-								(FIX_MAP *)private_temp_buff,
+							(FIX_MAP *)private_temp_buff,
 							new_width,
 							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
@@ -87,12 +93,14 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
-						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
+						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
+						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
+						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
 					}
 				}
+
 				// add bias
-				dsp_vs_add(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
+				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;
 		case 5:
@@ -114,12 +122,13 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
-						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
+						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
+						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
+						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
 					}
 				}
 				// add bias
-				dsp_vs_add(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
+				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;
 		case 7:

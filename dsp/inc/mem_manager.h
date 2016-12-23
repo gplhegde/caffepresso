@@ -14,11 +14,11 @@
 #define DRAM_ALIGNMENT CACHE_L1D_LINESIZE
 
 // size of private temp buffer used for padding and alignment during CONV and IP layers
-#define PRIVATE_TEMP_BUFF_SIZE	4*1024
+#define PRIVATE_TEMP_BUFF_SIZE	2*2048
 
 #ifdef DEVICE_K2H
 
-#define DSP_FREQ_IN_MHZ			1400
+
 #define L2_SRAM_SIZE			(0x00100000)
 #define MSMC_SRAM_SIZE 			(6*1024*1024)
 #define DDR_RAM_SIZE 			(0x80000000)

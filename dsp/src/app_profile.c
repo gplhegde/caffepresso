@@ -4,7 +4,7 @@
 #include <ti/csl/csl_tsc.h>
 
 #define MAX_TIMER_CNT	(0xFFFFFFFFFFFFFFFF)
-#define DSP_FREQ_IN_MHZ			1400
+
 
 void inline GET_TIME(uint64_t *time) {
 	*time = CSL_tscRead();

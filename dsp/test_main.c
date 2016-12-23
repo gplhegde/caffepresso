@@ -5,7 +5,7 @@
 #include "misc_utils.h"
 #include "data_sync.h"
 #include "dsp_bmarks.h"
-
+#include "edma_module.h"
 
 #ifndef DEVICE_K2H
 #error "Device not specified"
@@ -18,7 +18,7 @@
 #include "c6x.h"
 
 // unedf this to run the layer tests.
-#define RUN_BMARKS
+//#define RUN_BMARKS
 
 #pragma DATA_SECTION(core_id, ".local_ram")
 // CPU ID. This is local to each core since we are storing this in local RAM.
@@ -88,11 +88,14 @@ void main(void) {
 	run_dsp_bmarks();
 
 #else
+
+	dsp_init();
 	if(core_id == 0) {
+		// Reset the Semaphore module
 		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
-		printf("Sem reset\n");
+		// Setup EDMA channels for all cores
+		all_edma_init();
 	}
-	dsp_init();;
 
 	test_layers();
 #endif // RUN_BMARKS

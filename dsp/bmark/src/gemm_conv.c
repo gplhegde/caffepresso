@@ -12,6 +12,7 @@
 #include "data_sync.h"
 #include "app_profile.h"
 #include "misc_utils.h"
+#include "ext_dsplib.h"
 
 #define GEMM_BMARK_START_SIZE	(16)
 #define GEMM_BMARK_NO_CASES		(10)
@@ -27,48 +28,6 @@ GEMM_CTX_T far gemm_ctx;
 
 
 //----------------------------------------------------------------------------------
-
-#pragma CODE_SECTION(DSP_vs_add16_unroll_4, ".text:optimized");
-void DSP_vs_add16_unroll_4 (
-    short * restrict x,   /* Input array of length nx  */
-    short y,   			  /* Scalar value to be added */
-    short * restrict r,   /* Output array of length nx. even though the output array can be same as input in this case(because it is pointwise op) using restrict to fool the compiler*/
-    int              nx   /* Number of elements.       */
-)
-{
-    int i;
-
-    _nassert(((int)x & 4) ==0);
-    _nassert(((int)r & 4) ==0);
-    #pragma MUST_ITERATE(4,,4);
-    #pragma UNROLL(4);
-
-    for(i=0; i<nx; i++) {
-        r[i] = x[i] + y;
-    }
-}
-
-#pragma CODE_SECTION(DSPF_vs_add_unroll_4, ".text:optimized");
-void DSPF_vs_add_unroll_4 (
-    float * restrict x,   /* Input array of length nx  */
-    float y,   			  /* Scalar to be added */
-    float * restrict r,   /* Output array of length nx */
-    int              nx   /* Number of elements.       */
-)
-{
-    int i;
-
-    _nassert(((int)x & 7) ==0);
-    _nassert(((int)y & 7) ==0);
-    _nassert(((int)r & 7) ==0);
-    #pragma MUST_ITERATE(4,,4);
-    #pragma UNROLL(4);
-
-    for(i=0; i<nx; i++) {
-        r[i] = x[i] + y;
-    }
-}
-
 static inline split_gemm_row(int no_rows, int *subset_size, int *start_row) {
 	int quo, rem;
 
