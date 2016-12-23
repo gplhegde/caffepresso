@@ -74,6 +74,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 	// store in prior to nullify this effect.
 	switch(ker_size) {
 		case 3:
+			REL_ASSERT(in_width % 2 == 0);
 			// The output width for  IMG_conv_3x3_i16s_c16s API must be multiple of 2.
 			new_width = in_width - 2;
 			new_width = ((new_width & 0x1) == 0)? new_width : (new_width + 1);
@@ -98,13 +99,13 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
 					}
 				}
-
 				// add bias
 				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;
 		case 5:
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 2.
+			REL_ASSERT(in_width % 2 == 0);
 			new_width = ((in_width & 0x1) == 0)? in_width : in_width + 1;
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
@@ -112,7 +113,9 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						IMG_conv_5x5_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
 							(FIX_MAP *)private_temp_buff,
 							new_width - 4,
-							new_width,
+							// FIXME: if input_width is odd, then new_width = in_width + 1, the DSPLIB API will access rows at wrong offset
+							// from second row onwards leading to wrong output! Take care of this by padding extra column in the end when supporting padding.
+							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -132,9 +135,10 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			}
 			break;
 		case 7:
-			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
-			// TODO: Not tested for this kernel size
-			REL_ASSERT(1 == 0);
+			// The DSPLIIB API requrired the input width be factor of 4 and output width be factor of 8
+			// Since padding is not supported as of now, restrict the input width to be factor of 4
+			// TODO: handle this requirement while adding support for padding by padding necessary extra columns in the right size of the image.
+			REL_ASSERT(in_width % 4 == 0);
 			new_width = in_width - 6;
 			new_width = ((new_width & 0x7) == 0)? new_width : (new_width + 8 - new_width % 8);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -143,7 +147,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						IMG_conv_7x7_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
 							(FIX_MAP *)private_temp_buff,
 							new_width,
-							new_width,
+							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -153,19 +157,19 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
-						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
+						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
+						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
+						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
 					}
 				}
 				// add bias
-				dsp_vs_add(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
+				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;
 		case 11:
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
 			// TODO: Not tested for this kernel size
-			REL_ASSERT(1 == 0);
-			new_width = in_width - ker_size + 1;
+			new_width = in_width - 10;
 			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + 4 - new_width % 4);
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
@@ -173,7 +177,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						IMG_conv_11x11_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
 							(FIX_MAP *)private_temp_buff,
 							new_width,
-							new_width,
+							in_width,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -183,13 +187,13 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						}
 						// add the output corresponding to one input map.
 						// FIXME: This may cause the overflow. Need to saturate.
-						// TODO: Use APIs from DSPLIB for this.
-						dsp_vv_add(p_output + (omap * o_h + row / stride) * o_w, (FIX_MAP *)private_temp_buff, o_w);
+						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
+						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
+						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
 					}
 				}
 				// add bias
-				// FIXME: make sure that both bias and output are in the same Q format
-				dsp_vs_add(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
+				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 			break;
 		default:
