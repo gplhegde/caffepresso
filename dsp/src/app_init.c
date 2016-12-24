@@ -19,6 +19,15 @@ uint32_t *p_shared_dbuff2;
 STATUS_E init_conv_kernels(CONV_LYR_CTX_T *p_conv_ctx) {
 
 	int omap, imap;
+#ifdef USE_RANDOM_MODEL
+	generate_random_data(p_conv_ctx->p_flt_ker,
+		p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size *
+		p_conv_ctx->conv_info.no_inputs * p_conv_ctx->conv_info.no_outputs,
+		345);
+	generate_random_data(p_conv_ctx->p_flt_bias,
+		p_conv_ctx->conv_info.no_outputs,
+		3456);
+#endif // USE_RANDOM_MODEL
 
 	// convert kernels to fix point
 	for (omap = 0; omap < p_conv_ctx->conv_info.no_outputs; omap++) {
@@ -46,8 +55,16 @@ STATUS_E init_conv_kernels(CONV_LYR_CTX_T *p_conv_ctx) {
 
 STATUS_E init_ip_layer_params(IP_LYR_CTX_T *p_ip_ctx) {
 	int n;
-	float_to_fix_data(p_ip_ctx->p_flt_weight, p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_inputs * p_ip_ctx->ip_info.no_outputs,
-			p_ip_ctx->ip_info.no_ker_frac_bits, p_ip_ctx->p_fix_weight);
+#ifdef USE_RANDOM_MODEL
+	generate_random_data(p_ip_ctx->p_flt_weight,
+		p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_inputs * p_ip_ctx->ip_info.no_outputs,
+		p_ip_ctx->ip_info.no_outputs
+		);
+	generate_random_data(p_ip_ctx->p_flt_bias, p_ip_ctx->ip_info.no_outputs, 123);
+#endif // USE_RANDOM_MODEL
+	float_to_fix_data(p_ip_ctx->p_flt_weight,
+		p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_inputs * p_ip_ctx->ip_info.no_outputs,
+		p_ip_ctx->ip_info.no_ker_frac_bits, p_ip_ctx->p_fix_weight);
 	float_to_fix_data(p_ip_ctx->p_flt_bias, p_ip_ctx->ip_info.no_outputs, p_ip_ctx->ip_info.no_map_frac_bits, p_ip_ctx->p_fix_bias);
 	return SUCCESS;
 }
@@ -64,7 +81,14 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 				p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
 			o_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad -
 				p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
-
+#ifdef USE_RANDOM_MODEL
+			if ((NULL == (p_conv_ctx->p_flt_bias = (FLT_KER *)ext_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FLT_KER)))) ||
+				(NULL == (p_conv_ctx->p_flt_ker = (FIX_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
+				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FLT_KER))))) {
+				REL_INFO("Malloc failed\n");
+				return MALLOC_FAIL;
+			}
+#endif // USE_RANDOM_MODEL
 			if ((NULL == (p_conv_ctx->p_fix_bias = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER)))) ||
 				(NULL == (p_conv_ctx->p_fix_ker = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_inputs *
 				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER))))) {
@@ -96,7 +120,14 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 		case INNER_PROD:
 		{
 			IP_LYR_CTX_T *p_ip_ctx = (IP_LYR_CTX_T *)p_lyr_ctx;
-
+#ifdef USE_RANDOM_MODEL
+			if ((NULL == (p_ip_ctx->p_flt_weight = (FLT_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs *
+				p_ip_ctx->ip_info.no_inputs * sizeof(FLT_KER)))) ||
+				(NULL == (p_ip_ctx->p_flt_bias = (FLT_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs * sizeof(FLT_KER))))) {
+				REL_INFO("Malloc failed\n");
+				return MALLOC_FAIL;
+			}
+#endif // USE_RANDOM_MODEL
 			if ((NULL == (p_ip_ctx->p_fix_weight = (FIX_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs *
 				p_ip_ctx->ip_info.no_inputs * sizeof(FIX_KER)))) ||
 				(NULL == (p_ip_ctx->p_fix_bias = (FIX_KER *)ext_malloc(p_ip_ctx->ip_info.no_outputs * sizeof(FIX_KER))))) {

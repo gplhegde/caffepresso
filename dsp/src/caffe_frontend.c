@@ -159,10 +159,11 @@ void cnn_layer_internal_param_init(void) {
 				p_conv_ctx->conv_info.no_ker_frac_bits = ker_frac_bits;
 				p_conv_ctx->conv_info.no_map_frac_bits = map_frac_bits;
 				p_conv_ctx->lyr_arith_mode = common_arith_mode;
-
+#ifndef USE_RANDOM_MODEL
 				// Pointer to conv weights and biases, taken from the big network model arrays.
 				p_conv_ctx->p_flt_ker = conv_w_ptrs[conv_lyr];
 				p_conv_ctx->p_flt_bias = conv_b_ptrs[conv_lyr];
+#endif // USE_RANDOM_MODEL
 				conv_lyr++;
 				break;
 			case POOL:
@@ -179,10 +180,11 @@ void cnn_layer_internal_param_init(void) {
 				p_ip_ctx->ip_info.no_ker_frac_bits = ker_frac_bits;
 				p_ip_ctx->ip_info.no_map_frac_bits = map_frac_bits;
 				p_ip_ctx->lyr_arith_mode = common_arith_mode;
-
+#ifndef USE_RANDOM_MODEL
 				// Pointer to FC layer weights and biases, taken from the big network model arrays.
 				p_ip_ctx->p_flt_weight = ip_w_ptrs[ip_lyr];
 				p_ip_ctx->p_flt_bias = ip_b_ptrs[ip_lyr];
+#endif // USE_RANDOM_MODEL
 				ip_lyr++;
 				break;
 			case SOFTMAX:

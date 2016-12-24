@@ -37,7 +37,7 @@ void dsp_init() {
 	CACHE_setL1DSize(CACHE_L1_32KCACHE);
 
 	// Disable caching for starting 16MB DDR(refer to the API)
-	CACHE_disableCaching (128);
+	//CACHE_disableCaching (128);
 
 	// Set cache write-through mode for MSMC RAM region
 	CACHE_setMemRegionWritethrough(12, TRUE);
@@ -96,7 +96,7 @@ int main() {
 		main_cnn_app(p_image, &label);
 
 		if(core_id == MASTER_CORE_ID) {
-			printf("C_%d : Detected label = %d\t Actual label = %d\n", core_id, label, mnist_image_labels[img_cnt]);
+			REL_INFO("C_%d : Detected label = %d\t Actual label = %d\n", core_id, label, mnist_image_labels[img_cnt]);
 		}
 	}
 
