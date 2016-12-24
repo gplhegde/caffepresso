@@ -6,12 +6,8 @@
  */
 #include "struct_defs.h"
 #include <string.h>
+#include "misc_utils.h"
 
-// Taken from Caffe implementation
-// https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
-inline uint32_t is_a_ge_zero_and_a_lt_b(int a, int b) {
-  return (unsigned int)a < (unsigned int)b;
-}
 
 // Convert feature maps into a single 2D matrix with unrolled strided windows
 // Each column of the matrix will contain 1 3D window in its unrolled form.

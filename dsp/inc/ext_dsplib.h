@@ -28,5 +28,12 @@ void DSP_vs_add_unroll_8 (
     int              nx   /* Number of elements.       */
 );
 
-
+void DSP_vector_scale_translate(
+		short * restrict x,
+		short * restrict y,
+		short s,
+		short t,
+		int nx,
+		short shift
+	);
 #endif /* INC_EXT_DSPLIB_H_ */

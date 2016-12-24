@@ -33,7 +33,8 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						max = -32768; // TODO: define -ve min of FP_MAP_PIXEL type and use here.
 						for ( i = 0; i < win_size; i++) {
 							for ( j = 0; j < win_size; j++) {
-								max = MAX(max, p_input[map * in_width * in_height + (row + i) * in_width + col + j]);
+								//max = MAX(max, p_input[map * in_width * in_height + (row + i) * in_width + col + j]);
+								max = _max2(max, p_input[map * in_width * in_height + (row + i) * in_width + col + j]);
 							}
 						}
 						p_output[map * o_w * o_h + o_w * (row / stride) + (col / stride)] = max;

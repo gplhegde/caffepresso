@@ -8,5 +8,5 @@
 TEST_STATUS_E test_pool_layer();
 TEST_STATUS_E test_conv_layer();
 TEST_STATUS_E test_ip_layer();
-
+TEST_STATUS_E test_bnorm_layer();
 #endif // _UNIT_TEST_H

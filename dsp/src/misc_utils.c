@@ -10,6 +10,12 @@
 
 extern unsigned int core_id;
 
+// Taken from Caffe implementation
+// https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
+inline uint32_t is_a_ge_zero_and_a_lt_b(int a, int b) {
+  return (unsigned int)a < (unsigned int)b;
+}
+
 float mean_normalize(uint8_t *p_img, int H, int W, float *var, float *p_norm_img){
 	uint32_t sum, pixel;
 	float mean, norm_pixel;

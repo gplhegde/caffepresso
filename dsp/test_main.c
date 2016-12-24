@@ -6,7 +6,7 @@
 #include "data_sync.h"
 #include "dsp_bmarks.h"
 #include "edma_module.h"
-
+#include "mem_manager.h"
 #ifndef DEVICE_K2H
 #error "Device not specified"
 #endif
@@ -18,7 +18,7 @@
 #include "c6x.h"
 
 // unedf this to run the layer tests.
-//#define RUN_BMARKS
+#define RUN_BMARKS 0
 
 #pragma DATA_SECTION(core_id, ".local_ram")
 // CPU ID. This is local to each core since we are storing this in local RAM.
@@ -60,22 +60,22 @@ void dsp_init() {
 void main(void) {
 	core_id = CSL_chipReadReg(CSL_CHIP_DNUM);
 
-#ifdef RUN_BMARKS
+	// init core specific HW
+	dsp_init();
 	get_global_sync_obj();
 
 	if(core_id != MASTER_CORE_ID) {
 		REL_INFO("C_%d : Waiting for global config to finish\n", core_id);
 		wait_global_config();
+		L1_CACHE_INV((void *)CSL_MSMC_SRAM_REGS, MSMC_SRAM_SIZE, CACHE_WAIT);
 	}
-
-	// init core specific HW
-	dsp_init();
-
 
 	if(core_id == MASTER_CORE_ID) {
 		// Reset semaphore module
 		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
 
+		// Setup EDMA channels for all cores
+		all_edma_init();
 		// init global sync object and tell other cores to go and perform local init
 		flag_global_config_done();
 	}
@@ -84,22 +84,13 @@ void main(void) {
 
 	wait_all_local_config();
 
+#if RUN_BMARKS
 	// run benchmarks
 	run_dsp_bmarks();
-
 #else
-
-	dsp_init();
-	if(core_id == 0) {
-		// Reset the Semaphore module
-		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
-		// Setup EDMA channels for all cores
-		all_edma_init();
-	}
-
+	// test all supported layers
 	test_layers();
-#endif // RUN_BMARKS
-
+#endif
 	printf("%d : Application complete\n", core_id);
 }
 
@@ -145,6 +136,19 @@ int test_layers() {
 	status = test_ip_layer();
 	if(status != TEST_PASS) {
 		REL_INFO("Inner product layer test failed\nError = %d\n", status);
+		REL_INFO("Aborting...\n");
+		return -1;
+	}
+
+	if(DNUM == 0) {
+		while(!CSL_semAcquireDirect(INIT_DONE_SEM));
+	} else {
+		while(CSL_semIsFree(INIT_DONE_SEM));
+	}
+	printf("--------Testing Batch Normalization Layer-------\n");
+	status = test_bnorm_layer();
+	if(status != TEST_PASS) {
+		REL_INFO("Batch Normalization layer test failed\nError = %d\n", status);
 		REL_INFO("Aborting...\n");
 		return -1;
 	}

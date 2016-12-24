@@ -3,6 +3,8 @@
 #include "pool_layer.h"
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_cacheAux.h>
+#include <ti/csl/csl_tsc.h>
+#include "app_profile.h"
 #include <float.h>
 #include "misc_utils.h"
 #include "mem_manager.h"
@@ -76,6 +78,7 @@ CMP_STATUS_T compare_pool_out(POOL_LYR_CTX_T *p_ctx, FLT_MAP *pOutput) {
 TEST_STATUS_E test_pool_layer() {
 	int no_inputs, input_height, input_width, win_size, stride, pad;
 	int out_width, out_height, no_frac_bits;
+	uint64_t start_time, end_time;
 	POOL_TYPE_E pool_type;
 	CMP_STATUS_T status;
 	status.flag = TEST_PASS;
@@ -85,9 +88,9 @@ TEST_STATUS_E test_pool_layer() {
 		completion_cnt[1] = 0;
 		no_inputs = 10;
 		no_frac_bits = 14;
-		input_height = 17;
-		input_width = 17;
-		win_size = 2;
+		input_height = 28;
+		input_width = 28;
+		win_size = 3;
 		stride = 2;
 		pad = 0;
 		pool_type = MAX_POOL;
@@ -142,9 +145,12 @@ TEST_STATUS_E test_pool_layer() {
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == MASTER_CORE_ID) {
 		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FLOAT POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));
@@ -174,9 +180,12 @@ TEST_STATUS_E test_pool_layer() {
 	// compute floating point output
 	dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 #else
+	start_time = CSL_tscRead();
 	if(core_id == MASTER_CORE_ID) {
 		dsp_pool_layer(&pool_ctx, p_flt_input, p_fix_input);
 	}
+	end_time = CSL_tscRead();
+	printf("FIXED POINT RUNTIME = %.4fus\n", (float)(end_time - start_time)/ DSP_FREQ_IN_MHZ);
 #endif
 
 	while(!CSL_semAcquireDirect(SHARED_MEM_SEM));

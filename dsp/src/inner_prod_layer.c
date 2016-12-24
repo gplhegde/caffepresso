@@ -63,7 +63,7 @@ STATUS_E dsp_fix_ip_layer(FIX_MAP *p_input,	// pointer to input features
 	p_w[0] = global_address((Uint32)private_temp_buff);
 	p_w[1] = global_address((Uint32)private_conv_buff);
 
-	p_edma = &shared_edma_obj[0];
+	p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];
 	memset(p_w[0], 0, n_x4 * sizeof(FIX_KER));
 	dma_array(p_edma, p_weight, p_w[0], no_inputs * sizeof(FIX_KER));
 	// This will make sure that the extra multiplications are done with 0.

@@ -6,6 +6,8 @@
 #include "conv_layer.h"
 #include "caffe_frontend.h"
 
+inline uint32_t is_a_ge_zero_and_a_lt_b(int a, int b);
+
 float mean_normalize(uint8_t *p_img, int H, int W, float *var, float *p_norm_img);
 
 void char_to_float_image(uint8_t *p_char_img, int C, int H, int W, FLT_MAP *p_flt_img);

@@ -23,33 +23,37 @@ extern FIX_MAP far *p_fix_input;
 extern FLT_MAP far *p_ref_flt_output;
 
 void compute_conv_ref(CONV_LYR_CTX_T *p_ctx, FLT_MAP *p_flt_input) {
-	int row, col, o_h, o_w, i_h, i_w, omap, imap, hstart, wstart, kr, kc;
-	i_h = p_ctx->conv_info.map_h + 2*p_ctx->conv_info.pad;
-	i_w = p_ctx->conv_info.map_w + 2*p_ctx->conv_info.pad;
+	int out_row, in_row, out_col, in_col, o_h, o_w, i_h, i_w, omap, imap, kr, kc;
+	i_h = p_ctx->conv_info.map_h;
+	i_w = p_ctx->conv_info.map_w;
 	o_h = (p_ctx->conv_info.map_h + 2 * p_ctx->conv_info.pad - p_ctx->conv_info.ker_size + 1 + p_ctx->conv_info.stride - 1) / p_ctx->conv_info.stride;
 	o_w = (p_ctx->conv_info.map_w + 2 * p_ctx->conv_info.pad - p_ctx->conv_info.ker_size + 1 + p_ctx->conv_info.stride - 1) / p_ctx->conv_info.stride;
 
 	for(omap = 0; omap < p_ctx->conv_info.no_outputs; omap++) {
-		for(row = 0; row < o_h; row++) {
-			hstart = row * p_ctx->conv_info.stride;
-			for(col = 0; col < o_w; col++) {
-				wstart = col * p_ctx->conv_info.stride;
+		in_row = -p_ctx->conv_info.pad;
+		for(out_row = 0; out_row < o_h; out_row++) {
+			in_col = -p_ctx->conv_info.pad;
+			for(out_col = 0; out_col < o_w; out_col++) {
 				float sum = 0.0f;
 				for(imap = 0; imap < p_ctx->conv_info.no_inputs; imap++) {
 					for(kr = 0; kr < p_ctx->conv_info.ker_size; kr++) {
 						for(kc = 0; kc < p_ctx->conv_info.ker_size; kc++) {
-							sum += 	p_ctx->p_flt_ker[((omap * p_ctx->conv_info.no_inputs +imap) * p_ctx->conv_info.ker_size + kr)* p_ctx->conv_info.ker_size + kc] *
-								p_flt_input[imap * i_w * i_h + (hstart + kr) * i_w + wstart + kc];
+							if(is_a_ge_zero_and_a_lt_b(in_row + kr, i_h) & is_a_ge_zero_and_a_lt_b(in_col + kc, i_w)) {
+								sum += 	p_ctx->p_flt_ker[((omap * p_ctx->conv_info.no_inputs + imap) * p_ctx->conv_info.ker_size + kr)* p_ctx->conv_info.ker_size + kc] *
+								p_flt_input[imap * i_w * i_h + (in_row + kr) * i_w + in_col + kc];
+							}
 						}
 					}
 				}
 				sum += p_ctx->p_flt_bias[omap];
-				p_ref_flt_output[(omap * o_h + row) * o_w + col] = sum;
-			}	
+				p_ref_flt_output[(omap * o_h + out_row) * o_w + out_col] = sum;
+				in_col += p_ctx->conv_info.stride;
+			}
+			in_row += p_ctx->conv_info.stride;
 		}
+
 	}
 }
-
 CMP_STATUS_T compare_conv_out(CONV_LYR_CTX_T *p_ctx, FLT_MAP *p_output) {
 	int o_w, o_h, map, row, col;
 	CMP_STATUS_T status;
@@ -89,13 +93,13 @@ TEST_STATUS_E test_conv_layer() {
 		completion_cnt[1] = 0;
 		no_inputs = 1;
 		no_outputs = 20;
-		input_height = 28;
-		input_width = 28;
-		K = 3;
-		stride = 1;
-		pad = 0;
-		no_map_frac_bits = 10;
-		no_ker_frac_bits = 10;
+		input_height = 27;
+		input_width = 27;
+		K = 11;
+		stride = 2;
+		pad = 5;
+		no_map_frac_bits = 11;
+		no_ker_frac_bits = 11;
 	
 		out_height = (input_height + 2*pad - K + 1 + stride - 1)/ stride;
 		out_width = (input_width + 2*pad - K + 1 + stride - 1)/ stride;
@@ -223,11 +227,13 @@ TEST_STATUS_E test_conv_layer() {
 		//print_float_img(p_ref_flt_output, out_height, out_width);
 
 		status = compare_conv_out(&conv_ctx, conv_ctx.p_flt_output);
+		printf("Floating point test status : ");
 		check_cmp_status(&status);
 	
 		fix16_to_float_data(conv_ctx.p_fix_output, out_height * out_width * no_outputs, no_map_frac_bits, conv_ctx.p_flt_output);
 		status = compare_conv_out(&conv_ctx, conv_ctx.p_flt_output);
-		//print_float_img(conv_ctx.p_flt_output, out_height, out_width);
+
+		printf("Fixed point test status : ");
 		check_cmp_status(&status);
 	
 		shared_free(conv_ctx.p_flt_output);

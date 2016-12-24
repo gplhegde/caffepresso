@@ -55,17 +55,56 @@ void DSP_vs_add_unroll_8 (
 )
 {
     int i, n, rem;
+
+    // Perform scalar computations until x is 8byte aligned.
+    while((int)x % 8 != 0) {
+    	*x = *x + y;
+    	x++;
+    	nx--;
+    }
+
     n = (nx / 8) * 8;
     rem = nx % 8;
-    _nassert(((int)x & 7) ==0);
 
     #pragma MUST_ITERATE(8,,8);
     #pragma UNROLL(8);
-    for(i=0; i<n; i++) {
+    for(i = 0; i < n; i++) {
         x[i] += y;
     }
 
     for(i = n; i < n + rem; i++) {
     	x[i] += y;
+    }
+}
+
+// This does x * s + t where x is a vector of length nx and s,t are scalars
+#pragma CODE_SECTION(DSP_vector_scale_translate, ".text.optimized");
+void DSP_vector_scale_translate(
+		short * restrict x,
+		short * restrict y,
+		short s,
+		short t,
+		int nx,
+		short shift
+	) {
+    int i, n, rem;
+
+    // Perform scalar computations until x is 8byte aligned.
+    while((int)x % 8 != 0) {
+    	*y = ((*x * s) >> shift ) + t;
+    	x++; y++;
+    	nx--;
+    }
+
+    n = (nx / 8) * 8;
+    rem = nx % 8;
+    #pragma MUST_ITERATE(8,,8);
+    #pragma UNROLL(8);
+    for(i = 0; i < n; i++) {
+        y[i] = ((x[i] * s) >> shift) + t;
+    }
+
+    for(i = n; i < n + rem; i++) {
+    	y[i] = ((x[i] * s) >> shift) + t;
     }
 }

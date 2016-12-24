@@ -5,22 +5,21 @@
  *      Author: Gopalakrishna Hegde
  */
 #include "batch_norm_layer.h"
-
+#include "ext_dsplib.h"
+#include <assert.h>
 extern unsigned int core_id;
 
 STATUS_E dsp_fix_batch_norm_layer(FIX_MAP *p_input,
 	int map_h, int map_w, int no_maps, FIX_KER *p_scale,
 	FIX_KER *p_offset, int shift, FIX_MAP *p_output) {
 
-	int map, e;
-	int32_t res;
+	int map;
 	STATUS_E status;
 	for(map = 0; map < no_maps; map++) {
-		for(e = 0; e < map_h * map_w; e++) {
-			res = (p_input[map * map_h * map_w + e] * p_scale[map]) >> shift;
-			res += p_offset[map];
-			p_output[map * map_h * map_w + e] = res;
-		}
+
+		DSP_vector_scale_translate(p_input + map * map_h * map_w,
+			p_output + map * map_h * map_w, p_scale[map], p_offset[map], map_h * map_w, shift);
+
 	}
 	status = SUCCESS;
 	return status;
