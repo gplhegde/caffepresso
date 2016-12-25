@@ -52,6 +52,7 @@ layer {
   }
   convolution_param {
     num_output: 32
+    pad: 2
     kernel_size: 5
     stride: 1
     weight_filler {
@@ -86,6 +87,7 @@ layer {
   }
   convolution_param {
     num_output: 64
+	pad: 2
     kernel_size: 5
     stride: 1
     weight_filler {

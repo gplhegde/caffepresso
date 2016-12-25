@@ -49,10 +49,16 @@ def generate_gemm_params(model_file):
             ker = lyr.convolution_param.kernel_size[0]
             pad_h = lyr.convolution_param.pad_h
             pad_w = lyr.convolution_param.pad_w
-            pad = lyr.convolution_param.pad
+            if(lyr.convolution_param.pad):
+                pad = lyr.convolution_param.pad[0]
+            else:
+                pad = []
             stride_h = lyr.convolution_param.stride_h
             stride_w = lyr.convolution_param.stride_w
-            stride = lyr.convolution_param.stride[0]
+            if(lyr.convolution_param.stride):
+                stride = lyr.convolution_param.stride[0]
+            else:
+                stride = 0
 
             if(not pad):
                 pad = 0
