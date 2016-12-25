@@ -1,8 +1,37 @@
 #include "pool_layer.h"
 #include "struct_defs.h"
 #include <float.h>
-
+#include <stdio.h>
 extern unsigned int core_id;
+
+void unroll_maps(FIX_MAP *p_img, FIX_MAP *p_mat,
+	const int n_ch, const int in_h, const int in_w,
+	int win_size, int stride, int no_pad_cols, FIX_MAP pad_val) {
+
+	int out_h, out_w, out_row, out_col, in_row, in_col, ch, kr, kc;
+	out_h = (in_h - win_size) / stride + 1;
+	out_w = (in_w - win_size) / stride + 1;
+
+	for(ch = 0; ch < n_ch; ch++) {
+		in_row = 0;
+		for(out_row = 0; out_row < out_h; out_row++) {
+			in_col = 0;
+			for(out_col = 0; out_col < out_w; out_col++){
+				for(kr = 0; kr < win_size; kr++) {
+					for(kc = 0; kc < win_size; kc++) {
+						*p_mat++ = p_img[(in_row + kr)*in_w + in_col + kc];
+					}
+				}
+				// extra padding
+				for(kc = 0; kc < no_pad_cols; kc++) {
+					*p_mat++ = pad_val;
+				}
+				in_col += stride;
+			}
+			in_row += stride;
+		}
+	}
+}
 
 STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	int in_height,			// input feature map height
@@ -41,6 +70,7 @@ STATUS_E dsp_fix_pool_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 					}
 				}
 			}
+
 			break;
 		case AVG_POOL:
 			for (map = start_map; map < start_map + no_inputs; map++) {

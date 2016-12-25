@@ -91,14 +91,14 @@ TEST_STATUS_E test_conv_layer() {
 	if(core_id == 0) {
 		completion_cnt[0] = 0;
 		completion_cnt[1] = 0;
-		no_inputs = 1;
-		no_outputs = 20;
-		input_height = 27;
-		input_width = 27;
+		no_inputs = 3;
+		no_outputs = 96;
+		input_height = 224;
+		input_width = 224;
 		K = 11;
-		stride = 2;
-		pad = 5;
-		no_map_frac_bits = 11;
+		stride = 4;
+		pad = 0;
+		no_map_frac_bits = 10;
 		no_ker_frac_bits = 11;
 	
 		out_height = (input_height + 2*pad - K + 1 + stride - 1)/ stride;

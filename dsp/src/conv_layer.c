@@ -7,6 +7,7 @@
 #include "mem_manager.h"
 #include "misc_utils.h"
 #include "ext_dsplib.h"
+#include "edma_module.h"
 
 #define MAX_SUPPORTED_KER_SIZE 		(11)
 #define MAX_INPUT_MAP_WIDTH			(256)
@@ -19,15 +20,22 @@ extern unsigned int core_id;
 #pragma DATA_ALIGN(private_temp_buff, 8);
 #pragma DATA_SECTION(private_temp_buff, ".local_ram")
 uint8_t far private_temp_buff[PRIVATE_TEMP_BUFF_SIZE]; // FIXME: this array must be 32bit aligned which is a requirement for IMGLIB.
+
 #pragma DATA_ALIGN(private_conv_buff, 8);
 #pragma DATA_SECTION(private_conv_buff, ".local_ram")
-uint8_t private_conv_buff[PRIVATE_TEMP_BUFF_SIZE];
+uint8_t far private_conv_buff[PRIVATE_TEMP_BUFF_SIZE];
 
 #pragma DATA_ALIGN(line_buff_ping, 8);
 #pragma DATA_SECTION(line_buff_ping, ".local_ram")
-uint8_t line_buff_ping[MAX_SUPPORTED_KER_SIZE * MAX_INPUT_MAP_WIDTH];
+uint8_t far line_buff_ping[MAX_SUPPORTED_KER_SIZE * MAX_INPUT_MAP_WIDTH];
 
-static FIX_MAP *p_line_buff_ping[MAX_SUPPORTED_KER_SIZE];
+#pragma DATA_ALIGN(line_buff_pong, 8);
+// TODO: Enable linker attr. Linker warning due to neardata out of range. Handle this issue later.
+//#pragma DATA_SECTION(line_buff_pong, ".local_ram")
+uint8_t far line_buff_pong[MAX_SUPPORTED_KER_SIZE * MAX_INPUT_MAP_WIDTH];
+
+static FIX_MAP *p_line_buff[2][MAX_SUPPORTED_KER_SIZE];
+
 
 static inline void strided_move(FIX_MAP *p_input, int len, int stride) {
 	int col, i;
@@ -53,7 +61,8 @@ static inline void dsp_vs_add(FIX_MAP *p_acc, FIX_MAP s, int len) {
 }
 
 #define PADDING_SUPPORT 1
-
+#define CONV_BUFFERING 1
+#define CONV_EDMA 1
 
 STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
@@ -73,6 +82,8 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 
 	int o_h, o_w, omap, imap, row, new_width, o_w_x8;
 	int pitch, in_row, out_row, r;
+	Bool valid_row;
+	EDMA_OBJ_T * p_edma;
 	STATUS_E status = FAILED;
 
 	o_h = (in_height + 2 * pad - ker_size + 1 + stride - 1) / stride;
@@ -92,7 +103,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			pitch = in_width + 2 * pad;
 			pitch = pitch % 2 == 0? pitch : pitch + 1;
 			for(r = 0; r < 3; r++) {
-				p_line_buff_ping[r]  = (FIX_MAP *)line_buff_ping + r * pitch;
+				p_line_buff[0][r]  = (FIX_MAP *)line_buff_ping + r * pitch;
 			}
 
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -103,23 +114,23 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 2)) {
 							// need to laod all K rows	starting at line_buff[0]
 							for(r = 0; r < 3; r++) {
-								memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+								memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 							}
 						} else {
 							// Need to load only few rows
 							if(in_row < 0) { // need to load K + in_row number of rows starting at line buffer no
 								for(r = 0; r < 3 + in_row; r++) {
-									memcpy(p_line_buff_ping[-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							} else { // bottom end of input map
 								// reset the line buffers to mimic zero padding since it is overwritten by the input maps after initial reset.
 								memset(line_buff_ping, 0, 3 * pitch * sizeof(FIX_MAP));
 								for(r = 0; r < in_height - in_row; r++) {
-									memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							}
 						}
-						IMG_conv_3x3_i16s_c16s(p_line_buff_ping[0],
+						IMG_conv_3x3_i16s_c16s(p_line_buff[0][0],
 							(FIX_MAP *)private_temp_buff,
 							new_width,
 							pitch,
@@ -142,17 +153,56 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 #else
+			REL_ASSERT(pad == 0);
+			pitch = in_width % 2 == 0? in_width : in_width + 1;
+#if	!CONV_BUFFERING & CONV_EDMA
 			REL_ASSERT(in_width % 2 == 0);
+#endif
 			// The output width for  IMG_conv_3x3_i16s_c16s API must be multiple of 2.
 			new_width = in_width - 2;
 			new_width = ((new_width & 0x1) == 0)? new_width : (new_width + 1);
+#if CONV_BUFFERING
+#if CONV_EDMA
+			p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];
+			p_line_buff[1][0]  = global_address((Uint32)line_buff_pong);
+#endif
+			p_line_buff[0][0]  = global_address((Uint32)line_buff_ping);
+#endif
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
+#if CONV_BUFFERING
+#if CONV_EDMA
+					dma_array(p_edma, p_input + imap * in_height * in_width, p_line_buff[0][0], 3 * in_width * sizeof(FIX_MAP));
+					wait_for_dma_tx(p_edma, FALSE, FALSE);
+#endif
+					valid_row = 0;
+#endif
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						IMG_conv_3x3_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
+#if CONV_BUFFERING
+#if !CONV_EDMA
+						if(in_width % 2 != 0) {
+							memset(p_line_buff[0][0], 0, 3 * pitch * sizeof(FIX_MAP));
+							for(r = 0; r < 3; r++) {
+								memcpy(p_line_buff[0][0] + r * pitch, p_input + (imap * in_height + row + r) * in_width, in_width * sizeof(FIX_MAP));
+							}
+						} else {
+							memcpy(p_line_buff[0][0], p_input + (imap * in_height + row ) * in_width, 3 * in_width * sizeof(FIX_MAP));
+						}
+#else
+						if(row < in_height - ker_size) {
+							dma_array(p_edma, p_input + (imap * in_height + row + stride ) * in_width, p_line_buff[(valid_row+1)%2][0], 3 * in_width * sizeof(FIX_MAP));
+						}
+#endif
+#endif
+						IMG_conv_3x3_i16s_c16s(
+#if CONV_BUFFERING
+							p_line_buff[valid_row][0],
+#else
+							p_input + (imap * in_height + row ) * in_width,
+#endif
 							(FIX_MAP *)private_temp_buff,
 							new_width,
-							in_width,
+							pitch,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -165,6 +215,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
 						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
 						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
+#if CONV_BUFFERING	& CONV_EDMA
+						if(row < in_height - ker_size) {
+							wait_for_dma_tx(p_edma, FALSE, FALSE);
+						}
+						valid_row = valid_row == 0? 1:0;
+#endif
 					}
 				}
 				// add bias
@@ -180,7 +236,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			pitch = pitch % 2 == 0? pitch : pitch + 1;
 
 			for(r = 0; r < 5; r++) {
-				p_line_buff_ping[r]  = (FIX_MAP *)line_buff_ping + r * pitch;
+				p_line_buff[0][r]  = (FIX_MAP *)line_buff_ping + r * pitch;
 			}
 
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -191,23 +247,23 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 4)) {
 							// need to laod all K rows	starting at line_buff[0]
 							for(r = 0; r < 5; r++) {
-								memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+								memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 							}
 						} else {
 							// Need to load only few rows
 							if(in_row < 0) { // need to load K + in_row number of rows starting at line buffer no
 								for(r = 0; r < 5 + in_row; r++) {
-									memcpy(p_line_buff_ping[-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							} else { // bottom end of input map
 								// reset the line buffers to mimic zero padding since it is overwritten by the input maps after initial reset.
 								memset(line_buff_ping, 0, 5 * pitch * sizeof(FIX_MAP));
 								for(r = 0; r < in_height - in_row; r++) {
-									memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							}
 						}
-						IMG_conv_5x5_i16s_c16s(p_line_buff_ping[0],
+						IMG_conv_5x5_i16s_c16s(p_line_buff[0][0],
 							(FIX_MAP *)private_temp_buff,
 							new_width,
 							pitch,
@@ -230,18 +286,58 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 #else
+			REL_ASSERT(pad == 0);
+			pitch = in_width % 2 == 0? in_width : in_width + 1;
+#if	!CONV_BUFFERING & CONV_EDMA			
 			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 2.
 			REL_ASSERT(in_width % 2 == 0);
+#endif		
+			new_width = in_width - 4;	
 			new_width = ((in_width & 0x1) == 0)? in_width : in_width + 1;
+#if CONV_BUFFERING
+#if CONV_EDMA
+			p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];
+			p_line_buff[1][0]  = global_address((Uint32)line_buff_pong);
+#endif
+			p_line_buff[0][0]  = global_address((Uint32)line_buff_ping);
+#endif			
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
+#if CONV_BUFFERING
+#if CONV_EDMA
+					dma_array(p_edma, p_input + imap * in_height * in_width, p_line_buff[0][0], 5 * in_width * sizeof(FIX_MAP));
+					wait_for_dma_tx(p_edma, FALSE, FALSE);
+#endif
+					valid_row = 0;
+#endif					
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						IMG_conv_5x5_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
+#if CONV_BUFFERING
+#if !CONV_EDMA
+						if(in_width % 2 != 0) {
+							memset(p_line_buff[0][0], 0, 5 * pitch * sizeof(FIX_MAP));
+							for(r = 0; r < 5; r++) {
+								memcpy(p_line_buff[0][0] + r * pitch, p_input + (imap * in_height + row + r) * in_width, in_width * sizeof(FIX_MAP));
+							}
+						} else {
+							memcpy(p_line_buff[0][0], p_input + (imap * in_height + row ) * in_width, 5 * in_width * sizeof(FIX_MAP));
+						}
+#else
+						if(row < in_height - ker_size) {
+							dma_array(p_edma, p_input + (imap * in_height + row + stride ) * in_width, p_line_buff[(valid_row+1)%2][0], 5 * in_width * sizeof(FIX_MAP));
+						}
+#endif
+#endif						
+						IMG_conv_5x5_i16s_c16s(						
+#if CONV_BUFFERING
+							p_line_buff[valid_row][0],
+#else					
+							p_input + (imap * in_height + row ) * in_width,
+#endif	
 							(FIX_MAP *)private_temp_buff,
-							new_width - 4,
+							new_width,
 							// FIXME: if input_width is odd, then new_width = in_width + 1, the DSPLIB API will access rows at wrong offset
 							// from second row onwards leading to wrong output! Take care of this by padding extra column in the end when supporting padding.
-							in_width,
+							pitch,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -254,6 +350,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
 						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
 						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
+#if CONV_BUFFERING	& CONV_EDMA
+						if(row < in_height - ker_size) {
+							wait_for_dma_tx(p_edma, FALSE, FALSE);
+						}
+						valid_row = valid_row == 0? 1:0;
+#endif						
 					}
 				}
 				// add bias
@@ -270,7 +372,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			pitch = pitch % 4 == 0? pitch : pitch + (4 - pitch % 4);
 
 			for(r = 0; r < 7; r++) {
-				p_line_buff_ping[r]  = (FIX_MAP *)line_buff_ping + r * pitch;
+				p_line_buff[0][r]  = (FIX_MAP *)line_buff_ping + r * pitch;
 			}
 
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -281,23 +383,23 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 6)) {
 							// need to laod all K rows	starting at line_buff[0]
 							for(r = 0; r < 7; r++) {
-								memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+								memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 							}
 						} else {
 							// Need to load only few rows
 							if(in_row < 0) { // need to load K + in_row number of rows starting at line buffer no
 								for(r = 0; r < 7 + in_row; r++) {
-									memcpy(p_line_buff_ping[-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							} else { // bottom end of input map
 								// reset the line buffers to mimic zero padding since it is overwritten by the input maps after initial reset.
 								memset(line_buff_ping, 0, 7 * pitch * sizeof(FIX_MAP));
 								for(r = 0; r < in_height - in_row; r++) {
-									memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							}
 						}
-						IMG_conv_7x7_i16s_c16s(p_line_buff_ping[0],
+						IMG_conv_7x7_i16s_c16s(p_line_buff[0][0],
 							(FIX_MAP *)private_temp_buff,
 							new_width,
 							pitch,
@@ -320,19 +422,56 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 #else
+			REL_ASSERT(pad == 0);
 			// The DSPLIIB API requrired the input width be factor of 4 and output width be factor of 8
-			// Since padding is not supported as of now, restrict the input width to be factor of 4
-			// TODO: handle this requirement while adding support for padding by padding necessary extra columns in the right size of the image.
+			pitch = in_width % 4 == 0? in_width : in_width + (4 - in_width % 4);
+#if	!CONV_BUFFERING & CONV_EDMA
 			REL_ASSERT(in_width % 4 == 0);
+#endif
 			new_width = in_width - 6;
 			new_width = ((new_width & 0x7) == 0)? new_width : (new_width + 8 - new_width % 8);
+#if CONV_BUFFERING
+#if CONV_EDMA
+			p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];
+			p_line_buff[1][0]  = global_address((Uint32)line_buff_pong);
+#endif
+			p_line_buff[0][0]  = global_address((Uint32)line_buff_ping);
+#endif			
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
+#if CONV_BUFFERING
+#if CONV_EDMA
+					dma_array(p_edma, p_input + imap * in_height * in_width, p_line_buff[0][0], 7 * in_width * sizeof(FIX_MAP));
+					wait_for_dma_tx(p_edma, FALSE, FALSE);
+#endif
+					valid_row = 0;
+#endif					
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						IMG_conv_7x7_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
+#if CONV_BUFFERING
+#if !CONV_EDMA
+						if(in_width % 4 != 0) {
+							memset(p_line_buff[0][0], 0, 7 * pitch * sizeof(FIX_MAP));
+							for(r = 0; r < 7; r++) {
+								memcpy(p_line_buff[0][0] + r * pitch, p_input + (imap * in_height + row + r) * in_width, in_width * sizeof(FIX_MAP));
+							}
+						} else {
+							memcpy(p_line_buff[0][0], p_input + (imap * in_height + row ) * in_width, 7 * in_width * sizeof(FIX_MAP));
+						}
+#else
+						if(row < in_height - ker_size) {
+							dma_array(p_edma, p_input + (imap * in_height + row + stride ) * in_width, p_line_buff[(valid_row+1)%2][0], 7 * in_width * sizeof(FIX_MAP));
+						}
+#endif
+#endif						
+						IMG_conv_7x7_i16s_c16s(
+#if CONV_BUFFERING
+							p_line_buff[valid_row][0],
+#else						
+							p_input + (imap * in_height + row ) * in_width,
+#endif						
 							(FIX_MAP *)private_temp_buff,
 							new_width,
-							in_width,
+							pitch,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -345,6 +484,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
 						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
 						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
+#if CONV_BUFFERING	& CONV_EDMA
+						if(row < in_height - ker_size) {
+							wait_for_dma_tx(p_edma, FALSE, FALSE);
+						}
+						valid_row = valid_row == 0? 1:0;
+#endif						
 					}
 				}
 				// add bias
@@ -361,7 +506,7 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 			pitch = pitch % 8 == 0? pitch : pitch + (8 - pitch % 8);
 
 			for(r = 0; r < 11; r++) {
-				p_line_buff_ping[r]  = (FIX_MAP *)line_buff_ping + r * pitch;
+				p_line_buff[0][r]  = (FIX_MAP *)line_buff_ping + r * pitch;
 			}
 
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -372,23 +517,23 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 10)) {
 							// need to laod all K rows	starting at line_buff[0]
 							for(r = 0; r < 11; r++) {
-								memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+								memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 							}
 						} else {
 							// Need to load only few rows
 							if(in_row < 0) { // need to load K + in_row number of rows starting at line buffer no
 								for(r = 0; r < 11 + in_row; r++) {
-									memcpy(p_line_buff_ping[-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							} else { // bottom end of input map
 								// reset the line buffers to mimic zero padding since it is overwritten by the input maps after initial reset.
 								memset(line_buff_ping, 0, 11 * pitch * sizeof(FIX_MAP));
 								for(r = 0; r < in_height - in_row; r++) {
-									memcpy(p_line_buff_ping[r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
+									memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 								}
 							}
 						}
-						IMG_conv_11x11_i16s_c16s(p_line_buff_ping[0],
+						IMG_conv_11x11_i16s_c16s(p_line_buff[0][0],
 							(FIX_MAP *)private_temp_buff,
 							new_width,
 							pitch,
@@ -411,17 +556,47 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
 			}
 #else
-			// The input and output width for  IMG_conv_5x5_i16s_c16s API must be multiple of 8.
-			REL_ASSERT(in_width % 8 == 0);
+			REL_ASSERT(pad == 0);
+			// This kernse size has no restriction on input width
+			pitch = in_width;
 			new_width = in_width - 10;
 			new_width = ((new_width & 0x3) == 0)? new_width : (new_width + 4 - new_width % 4);
+#if CONV_BUFFERING
+#if CONV_EDMA
+			p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];
+			p_line_buff[1][0]  = global_address((Uint32)line_buff_pong);
+#endif
+			p_line_buff[0][0]  = global_address((Uint32)line_buff_ping);
+#endif			
 			for(omap = start_map; omap < start_map + no_maps; omap++) {
 				for(imap = 0; imap < no_inputs; imap++) {
+#if CONV_BUFFERING
+#if CONV_EDMA
+					dma_array(p_edma, p_input + imap * in_height * in_width, p_line_buff[0][0], 11 * in_width * sizeof(FIX_MAP));
+					wait_for_dma_tx(p_edma, FALSE, FALSE);
+#endif
+					valid_row = 0;
+#endif					
 					for(row = 0; row < in_height - ker_size + 1; row += stride) {
-						IMG_conv_11x11_i16s_c16s(p_input + (imap * in_height + row ) * in_width,
+#if CONV_BUFFERING
+#if !CONV_EDMA
+						memcpy(p_line_buff[0][0], p_input + (imap * in_height + row ) * in_width, 11 * in_width * sizeof(FIX_MAP));
+
+#else
+						if(row < in_height - ker_size) {
+							dma_array(p_edma, p_input + (imap * in_height + row + stride ) * in_width, p_line_buff[(valid_row+1)%2][0], 11 * in_width * sizeof(FIX_MAP));
+						}
+#endif
+#endif						
+						IMG_conv_11x11_i16s_c16s(
+#if CONV_BUFFERING
+							p_line_buff[valid_row][0],
+#else						
+							p_input + (imap * in_height + row ) * in_width,
+#endif						
 							(FIX_MAP *)private_temp_buff,
 							new_width,
-							in_width,
+							pitch,
 							p_weight + (omap * no_inputs + imap) * ker_size * ker_size,
 							shift
 							);
@@ -434,6 +609,12 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 						memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
 						DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
 						memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
+#if CONV_BUFFERING	& CONV_EDMA
+						if(row < in_height - ker_size) {
+							wait_for_dma_tx(p_edma, FALSE, FALSE);
+						}
+						valid_row = valid_row == 0? 1:0;
+#endif						
 					}
 				}
 				// add bias

@@ -3,7 +3,7 @@
 #include "struct_defs.h"
 
 //#define TEST_MULTICORE
-#define ERR_THRESHOLD (1e-2)
+#define ERR_THRESHOLD (1e-1)
 
 TEST_STATUS_E test_pool_layer();
 TEST_STATUS_E test_conv_layer();

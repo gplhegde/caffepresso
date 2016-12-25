@@ -2,9 +2,10 @@
  * ext_dsplib.c
  *
  *  Created on: 23 Dec 2016
- *      Author: hgashok
+ *      Author: Gopalakrishna  Hegde, NTU Singapore.
  */
 
+#include "dsplib.h"
 
 #pragma CODE_SECTION(DSP_vs_add16_unroll_4, ".text:optimized");
 void DSP_vs_add16_unroll_4 (
@@ -107,4 +108,18 @@ void DSP_vector_scale_translate(
     for(i = n; i < n + rem; i++) {
     	y[i] = ((x[i] * s) >> shift) + t;
     }
+}
+
+#pragma CODE_SECTION(DSP_fix_max_pool, ".text:optimized");
+void DSP_fix_max_pool(
+		short * restrict p_mat, // must be 8 byte aligned
+		int n_rows,
+		int n_cols,		//must be multiple of 8
+		short *restrict p_out
+		) {
+	int row;
+
+	for(row = 0; row < n_rows; row++) {
+		p_out[row] = DSP_maxval(p_mat + row * n_cols, n_cols);
+	}
 }

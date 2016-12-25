@@ -7,9 +7,10 @@
 #include "debug_control.h"
 #include "edma_module.h"
 #include "mem_manager.h"
+
 extern unsigned int core_id;
-extern uint8_t private_temp_buff[PRIVATE_TEMP_BUFF_SIZE];
-extern uint8_t private_conv_buff[PRIVATE_TEMP_BUFF_SIZE];
+extern uint8_t far private_temp_buff[PRIVATE_TEMP_BUFF_SIZE];
+extern uint8_t far private_conv_buff[PRIVATE_TEMP_BUFF_SIZE];
 static inline float float_dot_prod(float *p_input , float *p_weight, int len) {
     int e;
     float sop;

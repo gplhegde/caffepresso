@@ -16,7 +16,7 @@ STATUS_E dsp_fix_batch_norm_layer(FIX_MAP *p_input,
 	int map;
 	STATUS_E status;
 	for(map = 0; map < no_maps; map++) {
-
+// TODO: double buffering with EDMA
 		DSP_vector_scale_translate(p_input + map * map_h * map_w,
 			p_output + map * map_h * map_w, p_scale[map], p_offset[map], map_h * map_w, shift);
 

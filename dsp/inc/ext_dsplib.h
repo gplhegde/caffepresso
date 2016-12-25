@@ -36,4 +36,11 @@ void DSP_vector_scale_translate(
 		int nx,
 		short shift
 	);
+
+void DSP_fix_max_pool(
+		short * restrict p_mat, // must be 8 byte aligned
+		int n_rows,
+		int n_cols,		//must be multiple of 8
+		short *restrict p_out
+		);
 #endif /* INC_EXT_DSPLIB_H_ */
