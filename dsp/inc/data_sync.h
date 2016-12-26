@@ -15,7 +15,7 @@
 #include "user_config.h"
 #include "caffe_proto_params.h"
 // This must be multiple of cache line size
-#define DATA_SYNC_OBJ_SIZE	(L1_CACHE_LINE_SIZE)
+#define DATA_SYNC_OBJ_SIZE	(3*L1_CACHE_LINE_SIZE)
 
 /* Macros for invalidating and writing back
  * Use these only when L2 cache is configured as SRAM

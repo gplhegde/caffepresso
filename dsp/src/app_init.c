@@ -93,7 +93,7 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 				p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
 #ifdef USE_RANDOM_MODEL
 			if ((NULL == (p_conv_ctx->p_flt_bias = (FLT_KER *)ext_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FLT_KER)))) ||
-				(NULL == (p_conv_ctx->p_flt_ker = (FIX_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
+				(NULL == (p_conv_ctx->p_flt_ker = (FLT_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
 				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FLT_KER))))) {
 				REL_INFO("Malloc failed\n");
 				return MALLOC_FAIL;
@@ -102,7 +102,7 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 			if ((NULL == (p_conv_ctx->p_fix_bias = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER)))) ||
 				(NULL == (p_conv_ctx->p_fix_ker = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_inputs *
 				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER))))) {
-				REL_INFO("Malloc failed\n");
+				REL_INFO("Malloc failed : cannot fit conv params on MSMC\n");
 				return MALLOC_FAIL;
 			}
 			no_elements = p_conv_ctx->conv_info.no_outputs * o_h * o_w;

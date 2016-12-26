@@ -13,7 +13,7 @@
 /*                                                                          */
 /****************************************************************************/
 
-#define MSMC_SIZE_FOR_TEXT	0x1000
+#define MSMC_SIZE_FOR_TEXT	0x2000
 
 #define DEVICE_K2H
 

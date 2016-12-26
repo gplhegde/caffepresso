@@ -134,9 +134,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				p_float_input = p_smax_ctx->p_float_output;
 				no_outputs = p_smax_ctx->no_inputs;
 				break;
-			case DATA_CONVERSION:
-
-				break;
 			default:
 				REL_INFO("Unsupported layer\n");
 				return UNSUPPORTED_FEATURE;
