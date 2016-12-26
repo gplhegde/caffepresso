@@ -31,9 +31,15 @@ layer {
   top: "conv1"
 }
 layer {
+  name: "norm1"
+  type: "BatchNorm"
+  bottom: "conv1"
+  top: "norm1"
+}
+layer {
   name: "pool1"
   type: "Pooling"
-  bottom: "conv1"
+  bottom: "norm1"
   top: "pool1"
   pooling_param {
     pool: MAX
@@ -67,9 +73,15 @@ layer {
   top: "conv2"
 }
 layer {
+  name: "norm2"
+  type: "BatchNorm"
+  bottom: "conv2"
+  top: "norm2"
+}
+layer {
   name: "pool2"
   type: "Pooling"
-  bottom: "conv2"
+  bottom: "norm2"
   top: "pool2"
   pooling_param {
     pool: MAX

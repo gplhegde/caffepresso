@@ -1,5 +1,5 @@
 
-LayerEnums = ("CONV", "POOL", "ACT", "INNER_PROD", "SOFTMAX", "UNSUPPORTED_LYR")
+LayerEnums = ("CONV", "POOL", "ACT", "BATCH_NORM", "INNER_PROD", "SOFTMAX", "UNSUPPORTED_LYR")
 PoolTypeEnums = ("MAX_POOL", "AVG_POOL", "UNSUPPORTED_POOL")
 ActivationEmums = ("RELU", "SIGMOID", "TANH", "UNSUPPORTED_ACT")
 

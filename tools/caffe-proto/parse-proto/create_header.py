@@ -73,7 +73,14 @@ class DnnHeaderCreater(object):
 		actParam["botCon"]			= str(lyr.bottom[0])
 		actParam["lyrName"]		= lyr.name
 		self.strArray.append(actParam)
-		
+
+	def update_bnorm_lyr_struct(self, lyr):
+		bnormParam = deepcopy(LayerParamContainer)
+		bnormParam["lyrType"][0] = "BATCH_NORM"
+		bnormParam["topCon"] = str(lyr.top[0])		
+		bnormParam["botCon"] = str(lyr.bottom[0])
+		bnormParam["lyrName"] = lyr.name
+		self.strArray.append(bnormParam)
 
 	def update_ip_lyr_struct(self, lyr):
 		ipParam = deepcopy(LayerParamContainer)
@@ -101,6 +108,8 @@ class DnnHeaderCreater(object):
 				self.update_conv_lyr_struct(lyr)
 			elif lyr.type == "Pooling":
 				self.update_pool_lyr_struct(lyr)
+			elif lyr.type == "BatchNorm":
+				self.update_bnorm_lyr_struct(lyr)
 			elif lyr.type == "InnerProduct":
 				self.update_ip_lyr_struct(lyr)
 			elif lyr.type == "Softmax":
@@ -111,6 +120,8 @@ class DnnHeaderCreater(object):
 				raise ValueError(lyr.type + "This layer is not supported as of now.")
 
 	def order_structures(self):
+		#self.orderedStructs = self.strArray
+		#return
 		print("Re-ordering the list elements if required")
 		topCon = [e["topCon"] for e in self.strArray]
 		botCon = [e["botCon"] for e in self.strArray]
@@ -250,6 +261,13 @@ class DnnHeaderCreater(object):
 			print rd_ops
 			return ops, int(rd_ops), int(wr_ops)
 
+		def bnorm_ops(in_width, in_height, n_maps):
+			print 'batch norm :', in_width, in_height, n_maps
+			ops = in_width * in_height * n_maps * 2 # scaling ans adding offset
+			rd_ops = in_width * in_height * n_maps 
+			wr_ops = in_width * in_height * n_maps
+			return ops, rd_ops, wr_ops
+
 		def relu_ops(in_width, in_height, n_maps):
 			print 'relu:', in_width, in_height, n_maps
 			ops = in_width * in_height * n_maps
@@ -293,6 +311,11 @@ class DnnHeaderCreater(object):
 				map_height /= lyr['stride'][0]
 				map_height = max(1, map_height)
 				map_width = max(1, map_width)
+			elif lyr['lyrType'][0] == 'BATCH_NORM':
+				arith_ops, rd_ops, wr_ops = bnorm_ops(map_width, map_height, no_in_maps)
+				total_ops += arith_ops
+				total_rd_ops += rd_ops
+				total_wr_ops += wr_ops
 			elif lyr['lyrType'][0] == 'INNER_PROD':
 				arith_ops, rd_ops, wr_ops = fc_ops(map_height * map_width * no_in_maps, lyr['nOutputs'][0])
 				total_ops += arith_ops
@@ -352,7 +375,7 @@ def create_header(prototxtFile):
 
 	# write the header end string
 	hfile.write(endString)
-
+	hfile.write('\n')
     # print approx no of operations present in the network
 	#hw.compute_no_ops()
 
