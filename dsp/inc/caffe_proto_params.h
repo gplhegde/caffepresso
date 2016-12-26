@@ -14,6 +14,7 @@ typedef enum {
 	CONV,
 	POOL,
 	ACT,
+	BATCH_NORM,
 	INNER_PROD,
 	SOFTMAX,
 	DATA_CONVERSION,

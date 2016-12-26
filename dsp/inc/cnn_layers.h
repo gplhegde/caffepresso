@@ -5,4 +5,5 @@
 #include "activation_layer.h"
 #include "inner_prod_layer.h"
 #include "smax_layer.h"
+#include "batch_norm_layer.h"
 #endif // _CNN_LAYERS_H_

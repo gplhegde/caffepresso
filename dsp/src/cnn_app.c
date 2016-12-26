@@ -22,6 +22,7 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
 	ACT_LYR_CTX_T *p_act_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 	IP_LYR_CTX_T * p_ip_ctx;
 	SMAX_LYR_CTX_T *p_smax_ctx;
 	FIX_MAP *p_fix_input;
@@ -97,6 +98,14 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 				p_float_input = p_act_ctx->p_flt_output;
 				prev_arith_mode = p_act_ctx->lyr_arith_mode;
 				break;
+			case BATCH_NORM:
+				p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
+				dsp_batch_norm_layer(p_bnorm_ctx, p_float_input, p_fix_input);
+				p_fix_input = p_bnorm_ctx->p_fix_output;
+				p_float_input = p_bnorm_ctx->p_flt_output;
+				prev_arith_mode = p_bnorm_ctx->lyr_arith_mode;
+				prev_frac_bits = p_bnorm_ctx->bnorm_info.no_map_frac_bits;
+				break;
 			case INNER_PROD:
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[nn_lyr].p_lyr_ctx;
 
@@ -159,7 +168,6 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 	// reset the image init flag for this image
 	if(core_id == MASTER_CORE_ID) {
-		//printf("C_%d : Finding the class label\n", core_id);
 		*p_label = find_max_index(p_float_input, no_outputs);
 		reset_layer_sync_cntr();
 		toggle_image_init_flag(image_cnt);

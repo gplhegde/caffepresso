@@ -13,7 +13,7 @@
 #define APP_ARITHMETIC_MODE		(1)
 // Turn this on if the model parameters are not exported from trained model and need to
 // be generated randomly for the performance testing.
-//#define USE_RANDOM_MODEL
+#define USE_RANDOM_MODEL
 // TODO: Get these directly from TI platform specific header files.
 #ifdef DEVICE_K2H
 

@@ -69,6 +69,16 @@ STATUS_E init_ip_layer_params(IP_LYR_CTX_T *p_ip_ctx) {
 	return SUCCESS;
 }
 
+init_bnorm_layer_params(BNORM_LYR_CTX_T *p_bnorm_ctx) {
+
+#ifdef USE_RANDOM_MODEL
+	generate_random_data(p_bnorm_ctx->p_flt_scale, p_bnorm_ctx->bnorm_info.no_inputs, 123);
+	generate_random_data(p_bnorm_ctx->p_flt_offset, p_bnorm_ctx->bnorm_info.no_inputs, 123);
+#endif // USE_RANDOM_MODEL
+
+	float_to_fix_data(p_bnorm_ctx->p_flt_offset, p_bnorm_ctx->bnorm_info.no_inputs, p_bnorm_ctx->bnorm_info.no_map_frac_bits, p_bnorm_ctx->p_fix_offset);
+	float_to_fix_data(p_bnorm_ctx->p_flt_scale, p_bnorm_ctx->bnorm_info.no_inputs, p_bnorm_ctx->bnorm_info.no_ker_frac_bits, p_bnorm_ctx->p_fix_scale);
+}
 // returns total output buffer space(no of elements, not bytes) required buy this layer
 unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type) {
 	int o_h, o_w;
@@ -116,7 +126,24 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 			no_elements = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w *p_act_ctx->act_info.no_outputs;
 			break;
 		}
-
+		case BATCH_NORM:
+		{
+			BNORM_LYR_CTX_T *p_bnorm_ctx = (BNORM_LYR_CTX_T *)p_lyr_ctx;
+#ifdef USE_RANDOM_MODEL
+			if ((NULL == (p_bnorm_ctx->p_flt_scale = (FLT_KER *)ext_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FLT_KER)))) ||
+				(NULL == (p_bnorm_ctx->p_flt_offset = (FIX_KER *)ext_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FLT_KER))))) {
+				REL_INFO("Malloc failed\n");
+				return MALLOC_FAIL;
+			}
+#endif // USE_RANDOM_MODEL
+			if ((NULL == (p_bnorm_ctx->p_fix_scale = (FIX_KER *)shared_malloc(p_bnorm_ctx->bnorm_info.no_outputs * sizeof (FIX_KER)))) ||
+				(NULL == (p_bnorm_ctx->p_fix_offset = (FIX_KER *)shared_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FIX_KER))))) {
+				REL_INFO("Malloc failed\n");
+				return MALLOC_FAIL;
+			}
+			no_elements = p_bnorm_ctx->bnorm_info.map_h * p_bnorm_ctx->bnorm_info.map_w * p_bnorm_ctx->bnorm_info.no_outputs;
+			break;
+		}
 		case INNER_PROD:
 		{
 			IP_LYR_CTX_T *p_ip_ctx = (IP_LYR_CTX_T *)p_lyr_ctx;
@@ -161,6 +188,15 @@ STATUS_E caffe_cnn_layer_mem_free(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyrType) {
 			shared_free(p_conv_ctx->p_fix_ker);
 			break;
 		}
+		case BATCH_NORM:
+		{
+			BNORM_LYR_CTX_T *p_bnorm_ctx = (BNORM_LYR_CTX_T *)p_lyr_ctx;
+
+			shared_free(p_bnorm_ctx->p_fix_scale);
+			shared_free(p_bnorm_ctx->p_fix_offset);
+			break;
+
+		}
 		case INNER_PROD:
 		{
 			IP_LYR_CTX_T *p_ip_ctx = (IP_LYR_CTX_T *)p_lyr_ctx;
@@ -203,6 +239,7 @@ STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	ACT_LYR_CTX_T *p_act_ctx;
 	IP_LYR_CTX_T * p_ip_ctx;
 	SMAX_LYR_CTX_T *p_smax_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 
 	for (lyr = 0; lyr < n_layers; lyr++) {
 		switch(g_cnn_layer_nodes[lyr].lyr_type) {
@@ -225,6 +262,11 @@ STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_act_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
 				p_act_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
+				break;
+			case BATCH_NORM:
+				p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_bnorm_ctx->p_fix_output = (lyr % 2) == 0 ? (FIX_MAP*)p_shared_dbuff2 : (FIX_MAP*)p_shared_dbuff1;
+				p_bnorm_ctx->p_flt_output = (lyr % 2) == 0 ? (FLT_MAP*)p_shared_dbuff2 : (FLT_MAP*)p_shared_dbuff1;
 				break;
 			case INNER_PROD:
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
@@ -259,6 +301,7 @@ STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	int lyr;
 	IP_LYR_CTX_T *p_ip_ctx;
 	CONV_LYR_CTX_T *p_conv_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
 
 
@@ -269,6 +312,9 @@ STATUS_E cnn_app_model_init(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 		} else if(p_node->lyr_type == INNER_PROD) {
 			p_ip_ctx = (IP_LYR_CTX_T *)p_node->p_lyr_ctx;
 			init_ip_layer_params(p_ip_ctx);
+		} else if(p_node->lyr_type == BATCH_NORM) {
+			p_bnorm_ctx = (BNORM_LYR_CTX_T *)p_node->p_lyr_ctx;
+			init_bnorm_layer_params(p_bnorm_ctx);
 		}
 		p_node++;
 	}
@@ -281,6 +327,7 @@ STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
 	ACT_LYR_CTX_T *p_act_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
 
 	for (lyr = 0; lyr < n_layers; lyr++) {
@@ -339,6 +386,25 @@ STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 						map += (quo + 1);
 					} else {
 						p_act_ctx->no_maps[core] = quo;
+						map += quo;
+					}
+				}
+				break;
+			case BATCH_NORM:
+				p_bnorm_ctx = (BNORM_LYR_CTX_T *)p_node->p_lyr_ctx;
+				quo = p_bnorm_ctx->bnorm_info.no_outputs / NO_CORES;
+				rem = p_bnorm_ctx->bnorm_info.no_outputs % NO_CORES;
+				map = 0;
+				for(core = 0; core < NO_CORES; core++) {
+					p_bnorm_ctx->start_map[core] = map;
+					if(rem == 0) {
+						p_bnorm_ctx->no_maps[core] = quo;
+						map += quo;
+					} else if(core < rem) {
+						p_bnorm_ctx->no_maps[core] = quo + 1;
+						map += (quo + 1);
+					} else {
+						p_bnorm_ctx->no_maps[core] = quo;
 						map += quo;
 					}
 				}

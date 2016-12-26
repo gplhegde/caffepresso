@@ -8,6 +8,8 @@
 #include "misc_utils.h"
 #include "caffe_proto_params.h"
 #include "data_sync.h"
+#include "edma_module.h"
+#include "mem_manager.h"
 #include "mnist_test_images.h"
 #ifndef DEVICE_K2H
 #error "Device not specified"
@@ -71,7 +73,8 @@ int main() {
 	if(core_id == MASTER_CORE_ID) {
 		// Reset semaphore module
 		hSEM->SEM_RST_RUN = CSL_FMK(SEM_SEM_RST_RUN_RESET, 1);
-
+		// Init all EDMA channels for all cores.
+		all_edma_init();
 		// CNN specific shared context init
 		main_init();
 
@@ -87,17 +90,22 @@ int main() {
 		print_layer_node_ctx(g_cnn_layer_nodes, NO_DEEP_LAYERS);
 	}
 
-	// TODO: Do  Input image init, normalization. Only by the master core.
-
-	for(img_cnt = 0; img_cnt < 10/*NO_TEST_IMAGES*/; img_cnt++) {
-		p_image = &mnist_image_data[img_cnt][0];
+	for(img_cnt = 0; img_cnt < NO_TEST_IMAGES; img_cnt++) {
+#ifdef USE_RANDOM_MODEL
+		p_image = (uint8_t *)ext_malloc(INPUT_IMG_HEIGHT * INPUT_IMG_WIDTH * sizeof(uint8_t));
+		generate_random_img(p_image, INPUT_IMG_HEIGHT, INPUT_IMG_WIDTH);
+#else
+		p_image = &test_image_data[img_cnt][0];
+#endif // generate_random_img
 
 		// run the main application
 		main_cnn_app(p_image, &label);
 
+#ifndef USE_RANDOM_MODEL
 		if(core_id == MASTER_CORE_ID) {
-			REL_INFO("C_%d : Detected label = %d\t Actual label = %d\n", core_id, label, mnist_image_labels[img_cnt]);
+			REL_INFO("C_%d : Detected label = %d\t Actual label = %d\n", core_id, label, test_image_labels[img_cnt]);
 		}
+#endif // USE_RANDOM_MODEL
 	}
 
 	if(core_id == MASTER_CORE_ID) {

@@ -60,9 +60,9 @@ static inline void dsp_vs_add(FIX_MAP *p_acc, FIX_MAP s, int len) {
 	}
 }
 
-#define PADDING_SUPPORT 1
-#define CONV_BUFFERING 1
-#define CONV_EDMA 1
+#define PADDING_SUPPORT 0
+#define CONV_BUFFERING 0
+#define CONV_EDMA 0
 
 STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format

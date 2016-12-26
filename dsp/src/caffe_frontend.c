@@ -22,6 +22,7 @@ void caffe_layer_ctx_init() {
 	ACT_LYR_CTX_T *p_act_ctx;
 	IP_LYR_CTX_T * p_ip_ctx;
 	SMAX_LYR_CTX_T *p_smax_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 
 	for (lyr = 0; lyr < NO_DEEP_LAYERS; lyr++) {
 		// First layer to be provided with input dimensions. Subsequent layer input dimensions are
@@ -53,6 +54,12 @@ void caffe_layer_ctx_init() {
 					m_h = p_act_ctx->act_info.map_h;
 					m_w = p_act_ctx->act_info.map_w;
 					n_maps = p_act_ctx->act_info.no_outputs;
+					break;
+				case BATCH_NORM:
+					p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[lyr-1].p_lyr_ctx;
+					m_h = p_bnorm_ctx->bnorm_info.map_h;
+					m_w = p_bnorm_ctx->bnorm_info.map_w;
+					n_maps = p_bnorm_ctx->bnorm_info.no_inputs;
 					break;
 				case INNER_PROD:
 					p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr-1].p_lyr_ctx;
@@ -109,6 +116,15 @@ void caffe_layer_ctx_init() {
 					.no_outputs = n_maps,
 					.act_type = cnn_param_table[lyr].actType};
 				break;
+			case BATCH_NORM:
+				g_cnn_layer_nodes[lyr].p_lyr_ctx = (BNORM_LYR_CTX_T *)shared_malloc(sizeof(BNORM_LYR_CTX_T));
+				p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_bnorm_ctx->bnorm_info = (BNORM_INFO_T) {.map_h = m_h,
+					.map_w = m_w,
+					.no_inputs = n_maps,
+					.no_outputs = n_maps
+				};
+				break;
 			case INNER_PROD:
 				g_cnn_layer_nodes[lyr].p_lyr_ctx = (IP_LYR_CTX_T *)shared_malloc(sizeof(IP_LYR_CTX_T));
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
@@ -130,17 +146,19 @@ void caffe_layer_ctx_init() {
 
 // Internal parameter initialization apart from caffe prototxt config parameters.
 void cnn_layer_internal_param_init(void) {
-	int lyr, conv_lyr, ip_lyr;
+	int lyr, conv_lyr, ip_lyr, bnorm_lyr;
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
 	ACT_LYR_CTX_T *p_act_ctx;
 	IP_LYR_CTX_T * p_ip_ctx;
 	SMAX_LYR_CTX_T *p_smax_ctx;
+	BNORM_LYR_CTX_T *p_bnorm_ctx;
 	LYR_ARITH_MODE_E common_arith_mode;
 	int common_frac_bits, ker_frac_bits, map_frac_bits;
 
 	conv_lyr = 0;
 	ip_lyr = 0;
+	bnorm_lyr = 0;
 	if(APP_ARITHMETIC_MODE) {
 		common_arith_mode = FIXED_POINT;
 	} else {
@@ -173,6 +191,17 @@ void cnn_layer_internal_param_init(void) {
 			case ACT:
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_act_ctx->lyr_arith_mode = common_arith_mode;
+				break;
+			case BATCH_NORM:
+				p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
+				p_bnorm_ctx->lyr_arith_mode = common_arith_mode;
+#ifndef USE_RANDOM_MODEL
+				//p_bnorm_ctx->p_flt_scale = bnorm_scale_ptrs[bnorm_lyr];
+				//p_bnorm_ctx->p_flt_offset = bnorm_offset_ptrs[bnorm_lyr];
+#endif
+				p_bnorm_ctx->bnorm_info.no_ker_frac_bits = ker_frac_bits;
+				p_bnorm_ctx->bnorm_info.no_map_frac_bits = map_frac_bits;
+				bnorm_lyr++;
 				break;
 			case INNER_PROD:
 				p_ip_ctx = (IP_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
