@@ -21,7 +21,7 @@
 #include <ti/csl/csl_cacheAux.h>
 #include "c6x.h"
 
-#pragma DATA_SECTION(core_id, ".local_ram")
+//#pragma DATA_SECTION(core_id, ".local_ram")
 // CPU ID. This is local to each core since we are storing this in local RAM.
 unsigned int core_id;
 

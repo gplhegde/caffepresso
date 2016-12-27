@@ -67,7 +67,11 @@ inline void strided_move(FIX_MAP *p_input, int len, int stride) {
 }
 
 inline Bool is_dram_addr(Uint32 addr) {
-	return addr > CSL_DDR3_0_DATA;
+	return addr >= CSL_DDR3_0_DATA;
+}
+
+inline Bool is_on_chip_addr(Uint32 addr) {
+	return addr < CSL_DDR3_0_DATA;
 }
 
 STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
@@ -80,6 +84,21 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 	int start_map,		// map offset to start fot this core.
 	int no_maps, 		// no of feature maps assigned to this core.
 	int pad,			// padding in all 4 sides. Only equal padding in all dimensions is supported.
+	int stride,			// convolution window stride in both horizontal and vertical direction.
+	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
+	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
+	);
+
+// Use this when pad == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_11x11_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
+	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
+	int in_height,		// input feature map height
+	int in_width,		// input feature map width
+	int no_inputs,		// number of input feature maps
+	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
 	int stride,			// convolution window stride in both horizontal and vertical direction.
 	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
@@ -116,6 +135,36 @@ STATUS_E dsp_fix_conv_5x5(FIX_MAP *p_input,	// pointer to input maps stored in f
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
 	);
 
+// Use this when pad == 0 AND in_width % 4 == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_7x7_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
+	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
+	int in_height,		// input feature map height
+	int in_width,		// input feature map width
+	int no_inputs,		// number of input feature maps
+	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
+	int stride,			// convolution window stride in both horizontal and vertical direction.
+	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
+	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
+	);
+
+// Use this when pad == 0 AND in_width % 2 == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_5x5_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
+	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
+	int in_height,		// input feature map height
+	int in_width,		// input feature map width
+	int no_inputs,		// number of input feature maps
+	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
+	int stride,			// convolution window stride in both horizontal and vertical direction.
+	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
+	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
+	);
+
 STATUS_E dsp_fix_conv_3x3(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
@@ -131,6 +180,19 @@ STATUS_E dsp_fix_conv_3x3(FIX_MAP *p_input,	// pointer to input maps stored in f
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
 	);
 
-
+// Use this when pad == 0 AND in_width % 2 == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_3x3_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
+	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
+	int in_height,		// input feature map height
+	int in_width,		// input feature map width
+	int no_inputs,		// number of input feature maps
+	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
+	int stride,			// convolution window stride in both horizontal and vertical direction.
+	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
+	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
+	);
 STATUS_E dsp_conv_layer(CONV_LYR_CTX_T *p_conv_ctx, FLT_MAP *p_flt_in_maps, FIX_MAP *p_fix_in_map);
 #endif // _CONV_LAYER_H

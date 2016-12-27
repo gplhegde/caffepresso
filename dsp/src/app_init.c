@@ -3,6 +3,7 @@
 #include "misc_utils.h"
 #include "mem_manager.h"
 #include <string.h>
+#include <stdlib.h>
 
 /*Pointers to shared data buffers allocated on MSMC RAM. These 2 buffers are used alternately buy
  *	all layers. Different cores may access these buffers at different offsets depending upon the type of
@@ -99,12 +100,27 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 				return MALLOC_FAIL;
 			}
 #endif // USE_RANDOM_MODEL
-			if ((NULL == (p_conv_ctx->p_fix_bias = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER)))) ||
-				(NULL == (p_conv_ctx->p_fix_ker = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_inputs *
-				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER))))) {
-				REL_INFO("Malloc failed : cannot fit conv params on MSMC\n");
+			if ((NULL == (p_conv_ctx->p_fix_bias = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER))))) {
 				return MALLOC_FAIL;
 			}
+
+#ifdef CONV_WEIGHTS_OCM
+			if(NULL == (p_conv_ctx->p_fix_ker = (FIX_KER *)shared_malloc(p_conv_ctx->conv_info.no_inputs *
+				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER)))) {
+
+				REL_INFO("cannot fit conv params on MSMC. Turn off CONV_WEIGHTS_OCM flag\n");
+				exit(-1);
+
+			}
+#else
+			// fall back to external memory if we cannot store the conv weights on MSMC
+			p_conv_ctx->p_fix_ker = (FIX_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
+							p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER));
+			if(p_conv_ctx->p_fix_ker == NULL) {
+				return MALLOC_FAIL;
+			}
+#endif // CONV_WEIGHTS_OCM
+
 			no_elements = p_conv_ctx->conv_info.no_outputs * o_h * o_w;
 			break;
 		}
@@ -227,11 +243,11 @@ STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 		p_node++;
 	}
 
-	DBG_INFO("Max buffer size requirement = %d elements\n", max_buff_elements);
+	REL_INFO("Max buffer size requirement = %d elements\n", max_buff_elements);
 	// shared ping-pong buffer allocation on MSMC RAM
-	DBG_INFO("Allocating 2 buffers with max buffer size requirement\n");
-	p_shared_dbuff1 = (uint32_t*)shared_malloc(sizeof(FLT_MAP) * max_buff_elements);
-	p_shared_dbuff2 = (uint32_t*)shared_malloc(sizeof(FLT_MAP) * max_buff_elements);
+	REL_INFO("Allocating 2 buffers with max buffer size requirement\n");
+	p_shared_dbuff1 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_elements);
+	p_shared_dbuff2 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_elements);
 
 	//===============
 	CONV_LYR_CTX_T *p_conv_ctx;

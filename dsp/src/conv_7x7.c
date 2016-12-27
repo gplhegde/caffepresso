@@ -152,3 +152,58 @@ STATUS_E dsp_fix_conv_7x7(FIX_MAP *p_input,	// pointer to input maps stored in f
 	}
 	return status;
 }
+
+// Use this when pad == 0 AND in_width % 4 == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_7x7_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
+	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
+	int in_height,		// input feature map height
+	int in_width,		// input feature map width
+	int no_inputs,		// number of input feature maps
+	int no_outputs,		// number of output feature maps
+	int start_map,		// map offset to start fot this core.
+	int no_maps, 		// no of feature maps assigned to this core.
+	int stride,			// convolution window stride in both horizontal and vertical direction.
+	int shift,			// Shifts used for 16b fixed point conversion. Perform shift before adding bias.
+	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
+	) {
+
+	int o_h, o_w, omap, imap, o_w_x8;
+	int row;
+	STATUS_E status = FAILED;
+
+	o_h = (in_height - 6 + stride - 1) / stride;
+	o_w = (in_width  - 6 + stride - 1) / stride;
+
+	// reset the output maps buffer; only the portion that belongs to this core.
+	memset(p_output + start_map * o_h * o_w, 0, o_h * o_w * no_maps * sizeof(FIX_MAP));
+	// DSP_add16 required the array length to mubr x8
+	o_w_x8 = in_width - 6;
+	o_w_x8 = (o_w_x8 % 8 == 0)? o_w_x8 : o_w_x8 + (8 - o_w_x8 % 8);
+
+	for(omap = start_map; omap < start_map + no_maps; omap++) {
+		for(imap = 0; imap < no_inputs; imap++) {
+			for(row = 0; row < in_height - 6; row += stride) {
+				IMG_conv_7x7_i16s_c16s(
+					p_input + (imap * in_height + row ) * in_width,// must be 64bit aligned
+					(FIX_MAP *)private_temp_buff,// must be 64bit aligned
+					o_w_x8,		// must be x8
+					in_width,	// must be x4
+					p_weight + (omap * no_inputs + imap) * 49,
+					shift
+					);
+				// throw unnecessary pixels to mimic column stride
+				if(stride != 1) {
+					strided_move((FIX_MAP *)private_temp_buff, o_w, stride);
+				}
+				// add the output corresponding to one input map.
+				memcpy(private_conv_buff, p_output + (omap * o_h + row / stride) * o_w, o_w * sizeof(FIX_MAP));
+				DSP_add16((FIX_MAP *)private_conv_buff, (FIX_MAP *)private_temp_buff, (FIX_MAP *)private_conv_buff, o_w_x8);
+				memcpy(p_output + (omap * o_h + row / stride) * o_w, private_conv_buff, o_w * sizeof(FIX_MAP));
+			}
+		}
+		// add bias
+		DSP_vs_add_unroll_8(p_output + omap * o_h * o_w, p_bias[omap], o_w * o_h);
+	}
+	return status;
+}

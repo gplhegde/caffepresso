@@ -14,6 +14,10 @@
 // Turn this on if the model parameters are not exported from trained model and need to
 // be generated randomly for the performance testing.
 #define USE_RANDOM_MODEL
+
+// Enable this to store convolution layer weights on-chip
+//#define CONV_WEIGHTS_OCM
+
 // TODO: Get these directly from TI platform specific header files.
 #ifdef DEVICE_K2H
 
