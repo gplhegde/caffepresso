@@ -24,11 +24,19 @@
  * size : should be multiple for L1 cache line size
  * flag : to specify whether the call is blocking or non-blocking. Valid flags are from CACHE_Wait enum. Refer csl_cache.h
  */
-#define L1_CACHE_INV(addr, size, flag)    CACHE_invL1d (addr, size, flag)
+#define L1_CACHE_INV(addr, size, flag)		CACHE_invL1d (addr, size, flag)
 
-#define L1_CACHE_WB(addr, size, flag)     CACHE_wbL1d (addr, size, flag)
+#define L1_CACHE_WB(addr, size, flag)		CACHE_wbL1d (addr, size, flag)
 
+#ifdef USE_L2_CACHE
+#define L2_CACHE_WB(addr, size, flag)		CACHE_wbL2(addr, size, flag)
 
+#define L2_CACHE_INV(addr, size, flag)		CACHE_invL2 (addr, size, flag)
+#else
+#define L2_CACHE_WB(addr, size, flag)
+
+#define L2_CACHE_INV(addr, size, flag)
+#endif // USE_L2_CACHE
 typedef struct {
 	// flag to indicate global configuration status. Set by master core, read by all others
 	uint32_t global_cfg_done;

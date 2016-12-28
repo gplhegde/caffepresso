@@ -40,10 +40,13 @@ STATUS_E init_conv_kernels(CONV_LYR_CTX_T *p_conv_ctx) {
 		}
 	}
 	// rotate the fixed point kernel to compensate for the 180 deg rotation performed by the IMGLIB APIs
-	for(omap = 0; omap < p_conv_ctx->conv_info.no_outputs; omap++) {
-		for(imap = 0; imap < p_conv_ctx->conv_info.no_inputs; imap++) {
-			rotate_180(p_conv_ctx->p_fix_ker + (omap * p_conv_ctx->conv_info.no_inputs + imap) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
-				p_conv_ctx->conv_info.ker_size, p_conv_ctx->conv_info.ker_size);
+	if(p_conv_ctx->conv_info.ker_size == 3 || p_conv_ctx->conv_info.ker_size == 5 ||
+			p_conv_ctx->conv_info.ker_size == 7 || p_conv_ctx->conv_info.ker_size == 11) {
+		for(omap = 0; omap < p_conv_ctx->conv_info.no_outputs; omap++) {
+			for(imap = 0; imap < p_conv_ctx->conv_info.no_inputs; imap++) {
+				rotate_180(p_conv_ctx->p_fix_ker + (omap * p_conv_ctx->conv_info.no_inputs + imap) * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size,
+						p_conv_ctx->conv_info.ker_size, p_conv_ctx->conv_info.ker_size);
+			}
 		}
 	}
 	// Init bias of conv layer.
@@ -81,17 +84,18 @@ init_bnorm_layer_params(BNORM_LYR_CTX_T *p_bnorm_ctx) {
 	float_to_fix_data(p_bnorm_ctx->p_flt_scale, p_bnorm_ctx->bnorm_info.no_inputs, p_bnorm_ctx->bnorm_info.no_ker_frac_bits, p_bnorm_ctx->p_fix_scale);
 }
 // returns total output buffer space(no of elements, not bytes) required buy this layer
-unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type) {
+STATUS_E caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type) {
 	int o_h, o_w;
-	unsigned long no_elements = 0;
+	size_t buff_size;
+	FIX_KER *p_w_buff;
+	STATUS_E status;
+
+	status = SUCCESS;
+
 	switch(lyr_type) {
 		case CONV:
 		{
 			CONV_LYR_CTX_T *p_conv_ctx = (CONV_LYR_CTX_T *)p_lyr_ctx;
-			o_h = (p_conv_ctx->conv_info.map_h + 2*p_conv_ctx->conv_info.pad -
-				p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
-			o_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad -
-				p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
 #ifdef USE_RANDOM_MODEL
 			if ((NULL == (p_conv_ctx->p_flt_bias = (FLT_KER *)ext_malloc(p_conv_ctx->conv_info.no_outputs * sizeof (FLT_KER)))) ||
 				(NULL == (p_conv_ctx->p_flt_ker = (FLT_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
@@ -113,33 +117,30 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 
 			}
 #else
-			// fall back to external memory if we cannot store the conv weights on MSMC
-			p_conv_ctx->p_fix_ker = (FIX_KER *)ext_malloc(p_conv_ctx->conv_info.no_inputs *
-							p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER));
-			if(p_conv_ctx->p_fix_ker == NULL) {
-				return MALLOC_FAIL;
+			buff_size = p_conv_ctx->conv_info.no_inputs *
+				p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.ker_size * p_conv_ctx->conv_info.no_outputs * sizeof (FIX_KER);
+			if(NULL == (p_w_buff = private_malloc(buff_size))) { 		// try allocating on L2 SRAM
+				if(NULL == (p_w_buff = shared_malloc(buff_size))) {		// try on MSMC
+					if(NULL == (p_w_buff = ext_malloc(buff_size))) { 	// no other choice but to go for DDR
+						p_conv_ctx->p_fix_ker = NULL;
+						return MALLOC_FAIL;
+					}
+				}
 			}
+			p_conv_ctx->p_fix_ker = p_w_buff;
 #endif // CONV_WEIGHTS_OCM
-
-			no_elements = p_conv_ctx->conv_info.no_outputs * o_h * o_w;
 			break;
 		}
 
 		case POOL:
 		{
 			POOL_LYR_CTX_T *p_pool_ctx = (POOL_LYR_CTX_T *)p_lyr_ctx;
-			o_h = (p_pool_ctx->pool_info.map_h + 2*p_pool_ctx->pool_info.pad -
-				p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
-			o_w = (p_pool_ctx->pool_info.map_w + 2*p_pool_ctx->pool_info.pad -
-				p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
-			no_elements = p_pool_ctx->pool_info.no_inputs * o_h * o_w;
 			break;
 		}
 
 		case ACT:	
 		{
 			ACT_LYR_CTX_T *p_act_ctx = (ACT_LYR_CTX_T *)p_lyr_ctx;
-			no_elements = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w *p_act_ctx->act_info.no_outputs;
 			break;
 		}
 		case BATCH_NORM:
@@ -147,7 +148,7 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 			BNORM_LYR_CTX_T *p_bnorm_ctx = (BNORM_LYR_CTX_T *)p_lyr_ctx;
 #ifdef USE_RANDOM_MODEL
 			if ((NULL == (p_bnorm_ctx->p_flt_scale = (FLT_KER *)ext_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FLT_KER)))) ||
-				(NULL == (p_bnorm_ctx->p_flt_offset = (FIX_KER *)ext_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FLT_KER))))) {
+				(NULL == (p_bnorm_ctx->p_flt_offset = (FLT_KER *)ext_malloc(p_bnorm_ctx->bnorm_info.no_inputs * sizeof (FLT_KER))))) {
 				REL_INFO("Malloc failed\n");
 				return MALLOC_FAIL;
 			}
@@ -157,7 +158,6 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 				REL_INFO("Malloc failed\n");
 				return MALLOC_FAIL;
 			}
-			no_elements = p_bnorm_ctx->bnorm_info.map_h * p_bnorm_ctx->bnorm_info.map_w * p_bnorm_ctx->bnorm_info.no_outputs;
 			break;
 		}
 		case INNER_PROD:
@@ -177,20 +177,20 @@ unsigned long caffe_cnn_layer_malloc(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyr_type)
 				REL_INFO("Malloc failed\n");
 				return MALLOC_FAIL;
 			}
-			no_elements = p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_outputs;
+
 			break;
 		}
 		case SOFTMAX:
 		{
 			SMAX_LYR_CTX_T *p_smax_ctx = (SMAX_LYR_CTX_T *)p_lyr_ctx;
-			no_elements = p_smax_ctx->no_inputs;
+
 			break;
 		}
 		default:
 			REL_INFO("Unsupported layer\n");
 			break;
 	}
-	return no_elements;
+	return status;
 }
 
 STATUS_E caffe_cnn_layer_mem_free(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyrType) {
@@ -227,27 +227,27 @@ STATUS_E caffe_cnn_layer_mem_free(void *p_lyr_ctx, CNN_LAYER_TYPE_E lyrType) {
 	return SUCCESS;
 }
 
-STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
+STATUS_E cnn_app_malloc(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers, unsigned long max_buff_req) {
 
-
-	unsigned long max_buff_elements, buff_elements;
-	max_buff_elements = 0;
 	int lyr;
 	CNN_LYR_NODE_T *p_node = p_lyr_nodes;
 
+	// shared ping-pong buffer allocation on MSMC RAM
+	REL_INFO("Allocating 2 buffers with max buffer size requirement\n");
+	p_shared_dbuff1 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_req);
+	p_shared_dbuff2 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_req);
+
+	if(p_shared_dbuff1 == NULL || p_shared_dbuff2 == NULL) {
+		REL_INFO("Could not allocate memory for intermediate buffers on MSMC. Exiting\n");
+		exit(-1);
+	}
+
 	for (lyr = 0; lyr < n_layers; lyr++) {
-		buff_elements = caffe_cnn_layer_malloc(p_node->p_lyr_ctx, p_node->lyr_type);
-		if(max_buff_elements < buff_elements) {
-			max_buff_elements = buff_elements;
+		if(SUCCESS != caffe_cnn_layer_malloc(p_node->p_lyr_ctx, p_node->lyr_type)) {
+			REL_INFO("Layer parameter malloc failed\n");
 		}
 		p_node++;
 	}
-
-	REL_INFO("Max buffer size requirement = %d elements\n", max_buff_elements);
-	// shared ping-pong buffer allocation on MSMC RAM
-	REL_INFO("Allocating 2 buffers with max buffer size requirement\n");
-	p_shared_dbuff1 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_elements);
-	p_shared_dbuff2 = (uint32_t*)shared_malloc(sizeof(FIX_MAP) * max_buff_elements);
 
 	//===============
 	CONV_LYR_CTX_T *p_conv_ctx;
@@ -453,16 +453,18 @@ STATUS_E workload_sharing_config(CNN_LYR_NODE_T *p_lyr_nodes, int n_layers) {
 }
 
 STATUS_E main_cnn_app_init() {
+	unsigned long max_buff_req;
 	STATUS_E status = SUCCESS;
 
 	REL_INFO("Initializing network context...\n");
 	caffe_layer_ctx_init();
 
 	REL_INFO("Initializing internal context...\n");
-	cnn_layer_internal_param_init();
+	max_buff_req = cnn_layer_internal_param_init();
 
 	REL_INFO("Allocating buffers...\n");
-	cnn_app_malloc(g_cnn_layer_nodes, NO_DEEP_LAYERS);
+	REL_INFO("Max buffer requrirement = %d elements\n", max_buff_req);
+	cnn_app_malloc(g_cnn_layer_nodes, NO_DEEP_LAYERS, max_buff_req);
 
 	REL_INFO("Initializing CNN model weights and biases\n");
 	cnn_app_model_init(g_cnn_layer_nodes, NO_DEEP_LAYERS);

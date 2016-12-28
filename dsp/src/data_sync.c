@@ -28,7 +28,7 @@ static uint32_t get_sync_member(SYNC_MEMBER_E member, uint32_t index) {
 	// TODO: Instead of invalidating entire sync object, invalidate only necessary cache line
 	// This needs to be considered when the sync object size exceeds the cache line size
 	L1_CACHE_INV((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
-
+	L2_CACHE_INV((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
 	switch(member) {
 		case GLOBAL_CFG_DONE:
 			member_val = (uint32_t)p_sync_obj->global_cfg_done;
@@ -82,6 +82,7 @@ void flag_global_config_done() {
 	// write back is not required if the shared data struct is placed on memory segment for which
 	// write-through mode is set in L1D cache controller
 	L1_CACHE_WB((void *)p_sync_obj, sizeof(shared_sync_mem), CACHE_WAIT);
+	L2_CACHE_WB((void *)p_sync_obj, sizeof(shared_sync_mem), CACHE_WAIT);
 }
 
 void wait_global_config() {
@@ -104,6 +105,7 @@ void flag_local_config_done() {
 	// write back is not required if the shared data struct is placed on memory segment for which
 	// write-through mode is set in L1D cache controller
 	L1_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
+	L2_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
 
 	// release the lock
 	CSL_semReleaseSemaphore (SHARED_MEM_SEM);
@@ -132,6 +134,7 @@ void signal_lyr_completion(uint32_t nn_lyr) {
 	// write back is not required if the shared data struct is placed on memory segment for which
 	// write-through mode is set in L1D cache controller
 	L1_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
+	L2_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
 
 	// release the lock
 	CSL_semReleaseSemaphore (SHARED_MEM_SEM);
@@ -149,6 +152,7 @@ void wait_for_maps(uint32_t nn_lyr) {
 	// invalidate all cached data from the map buffers in MSMC RAM except the shared data structures in the first 1KB region.
 	// this is because each core needs the output of all cores for the next layer.
 	L1_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
+	L2_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
 
 }
 
@@ -166,7 +170,7 @@ void reset_layer_sync_cntr() {
 	// write back is not required if the shared data struct is placed on memory segment for which
 	// write-through mode is set in L1D cache controller
 	L1_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
-
+	L2_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
 	// release the lock
 	CSL_semReleaseSemaphore (SHARED_MEM_SEM);
 }
@@ -179,6 +183,7 @@ void wait_for_image_init(uint32_t img_cnt) {
 	} while(!flag);
 	// Since master core has just updated the image buffer, invalidate cache.
 	L1_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
+	L2_CACHE_INV((void *)MSMC_SHARED_SRAM_BASE, MSMC_SHARED_SRAM_END - MSMC_SHARED_SRAM_BASE + 1, CACHE_WAIT);
 }
 
 // This must be only called from the master core
@@ -198,7 +203,7 @@ void toggle_image_init_flag(uint32_t img_cnt) {
 	// write back is not required if the shared data struct is placed on memory segment for which
 	// write-through mode is set in L1D cache controller
 	L1_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
-
+	L2_CACHE_WB((void *)p_sync_obj, DATA_SYNC_OBJ_SIZE, CACHE_WAIT);
 	// release the lock
 	CSL_semReleaseSemaphore (SHARED_MEM_SEM);
 }

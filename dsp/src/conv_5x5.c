@@ -121,7 +121,7 @@ STATUS_E dsp_fix_conv_5x5(FIX_MAP *p_input,	// pointer to input maps stored in f
 						}
 					}
 				}
-
+#ifndef USE_IMG_CORR
 				IMG_conv_5x5_i16s_c16s(p_line_buff[0][0], // must be 16bit aligned
 					p_temp_out_buff,	// must be 32bit aligned
 					o_w_x8,				// must be x2
@@ -129,7 +129,15 @@ STATUS_E dsp_fix_conv_5x5(FIX_MAP *p_input,	// pointer to input maps stored in f
 					p_conv_ker_buff[omap % 2] + imap * 25,
 					shift
 					);
-
+#else
+				IMG_corr_5x5_i16s_c16s_short(p_line_buff[0][0], // must be 16bit aligned
+					p_temp_out_buff,	// must be 32bit aligned
+					o_w_x8,				// must be x2
+					pitch,
+					p_conv_ker_buff[omap % 2] + imap * 25,
+					shift
+									);
+#endif
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move(p_temp_out_buff, o_w, stride);
@@ -188,6 +196,7 @@ STATUS_E dsp_fix_conv_5x5_constrained(FIX_MAP *p_input,	// pointer to input maps
 	for(omap = start_map; omap < start_map + no_maps; omap++) {
 		for(imap = 0; imap < no_inputs; imap++) {
 			for(row = 0; row < in_height - 4; row += stride) {
+#ifndef USE_IMG_CORR
 				IMG_conv_5x5_i16s_c16s(
 					p_input + (imap * in_height + row ) * in_width,
 					(FIX_MAP *)private_temp_buff,
@@ -196,6 +205,16 @@ STATUS_E dsp_fix_conv_5x5_constrained(FIX_MAP *p_input,	// pointer to input maps
 					p_weight + (omap * no_inputs + imap) * 25,
 					shift
 					);
+#else
+				IMG_corr_5x5_i16s_c16s_short(
+					p_input + (imap * in_height + row ) * in_width,
+					(FIX_MAP *)private_temp_buff,
+					new_width,
+					in_width,	// must be x2
+					p_weight + (omap * no_inputs + imap) * 25,
+					shift
+					);
+#endif
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move((FIX_MAP *)private_temp_buff, o_w, stride);

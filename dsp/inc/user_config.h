@@ -18,6 +18,8 @@
 // Enable this to store convolution layer weights on-chip
 //#define CONV_WEIGHTS_OCM
 
+//#define USE_L2_CACHE
+
 // TODO: Get these directly from TI platform specific header files.
 #ifdef DEVICE_K2H
 

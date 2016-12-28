@@ -25,7 +25,8 @@ MEMORY
 {
 
 #ifdef DEVICE_K2H
-    LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00100000   /* 1MB LOCAL L2/SRAM */
+    //LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00100000   /* 1MB LOCAL L2/SRAM */
+    LOCAL_L2_SRAM:  o = 0x00800000 l = 0x00080000   /* 512k LOCAL L2/SRAM */
     SHRAM:          o = 0x0C000000 l = MSMC_SIZE_FOR_TEXT   /* 6MB Multicore shared Memmory */
     DDR3:           o = 0x80000000 l = 0x80000000   /* 2GB CE0 and CE1 external DDR3 SDRAM */
 #else

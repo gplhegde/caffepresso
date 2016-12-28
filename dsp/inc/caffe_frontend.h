@@ -13,5 +13,5 @@ extern CNN_LYR_NODE_T g_cnn_layer_nodes[NO_DEEP_LAYERS];
 
 void caffe_layer_ctx_init();
 
-void cnn_layer_internal_param_init(void);
+unsigned long  cnn_layer_internal_param_init(void);
 #endif // _CAFFE_FRONTEND_H_

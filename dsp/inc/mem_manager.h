@@ -30,7 +30,7 @@
 
 
 // FIXME: base should be move to the end of .local_ram segment in linker script. Currently an offset of 0x30000 is used looking at map file.
-#define L2_PRIVATE_SRAM_BASE 	(CSL_C66X_COREPAC_LOCAL_L2_SRAM_REGS + 0x30000)
+#define L2_PRIVATE_SRAM_BASE 	(CSL_C66X_COREPAC_LOCAL_L2_SRAM_REGS + 0x00080000)
 #define L2_PRIVATE_SRAM_END		(L2_PRIVATE_SRAM_BASE + L2_SRAM_SIZE - 1)
 #define MSMC_SHARED_SRAM_BASE 	(CSL_MSMC_SRAM_REGS + 0x2000)
 #define MSMC_SHARED_SRAM_END	(CSL_MSMC_SRAM_REGS + MSMC_SRAM_SIZE - 1)

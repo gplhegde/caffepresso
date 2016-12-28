@@ -1,5 +1,5 @@
 /*
- * conv_3x3.c
+ * conv_11x11.c
  *
  *  Created on: 26 Dec 2016
  *      Author: Gopalakrishna Hegde, NTU Singapore
@@ -32,8 +32,9 @@ extern uint8_t far ker_buff_pong[MAX_SUPPORTED_KER_SIZE * MAX_SUPPORTED_KER_SIZE
 extern FIX_KER *p_conv_ker_buff[2];
 
 
+
 // Use this API when the weights are stored in DDR OR pad != 0
-STATUS_E dsp_fix_conv_3x3(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+STATUS_E dsp_fix_conv_9x9(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
 	int in_height,		// input feature map height
@@ -48,95 +49,94 @@ STATUS_E dsp_fix_conv_3x3(FIX_MAP *p_input,	// pointer to input maps stored in f
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
 	) {
 	int o_h, o_w, omap, imap, o_w_x8;
-	int pitch, in_row, out_row, r;
+	int pitch, in_row, out_row, r, kr;
 	FIX_MAP *p_temp_out_buff;
 	Bool use_dma;
 	EDMA_OBJ_T * p_edma;
+	FIX_KER padded_ker_9x9[121];
 	STATUS_E status = FAILED;
 
-	o_h = (in_height + 2 * pad - 2 + stride - 1) / stride;
-	o_w = (in_width  + 2 * pad - 2 + stride - 1) / stride;
+	o_h = (in_height + 2 * pad - 8 + stride - 1) / stride;
+	o_w = (in_width  + 2 * pad - 8 + stride - 1) / stride;
 	p_temp_out_buff = (FIX_MAP *)private_temp_buff;
 	// reset the output maps buffer; only the portion that belongs to this core.
 	memset(p_output + start_map * o_h * o_w, 0, o_h * o_w * no_maps * sizeof(FIX_MAP));
 
-	o_w_x8 = in_width + 2 * pad - 2;
+	memset(padded_ker_9x9, 0, 121 * sizeof(FIX_KER));
+
+	o_w_x8 = in_width + 2 * pad - 8;
 	o_w_x8 = (o_w_x8 % 8 == 0)? o_w_x8 : o_w_x8 + (8 - o_w_x8 % 8);
 
 	pitch = in_width + 2 * pad;
-	pitch = (pitch % 2 == 0) ? pitch : pitch + 1;
-
 	// We will use EDMA only for off-chip memory transfer. Simple memcpy() is
 	// found to be faster than EDMA for small on-chip transfers.
 	use_dma = is_dram_addr((Uint32)p_weight);
 	p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];	// using second channel allocated for each core for weight transfer
 
-	for(r = 0; r < 3; r++) {
+	for(r = 0; r < 11; r++) {
 		p_line_buff[0][r]  = (FIX_MAP *)line_buff_ping + r * pitch;
 		p_line_buff[1][r]  = (FIX_MAP *)line_buff_pong + r * pitch;
 	}
-	p_conv_ker_buff[0] = (FIX_KER *)global_address(ker_buff_ping);
-	p_conv_ker_buff[1] = (FIX_KER *)global_address(ker_buff_pong);
+	p_conv_ker_buff[0] = (FIX_KER *)global_address((Uint32)ker_buff_ping);
+	p_conv_ker_buff[1] = (FIX_KER *)global_address((Uint32)ker_buff_pong);
 
 	// preload the kernels corresponding to first output map
 	if(use_dma) {
-		dma_array(p_edma, p_weight + start_map * no_inputs * 9, p_conv_ker_buff[start_map % 2], no_inputs * 9 * sizeof(FIX_KER));
+		dma_array(p_edma, p_weight + start_map * no_inputs * 81, p_conv_ker_buff[start_map % 2], no_inputs * 81 * sizeof(FIX_KER));
 		wait_for_dma_tx(p_edma, FALSE, FALSE);
 	} else {
-		memcpy(p_conv_ker_buff[start_map % 2], p_weight + start_map * no_inputs * 9, no_inputs * 9 * sizeof(FIX_KER));
+		memcpy(p_conv_ker_buff[start_map % 2], p_weight + start_map * no_inputs * 81, no_inputs * 81 * sizeof(FIX_KER));
+
 	}
 
 	for(omap = start_map; omap < start_map + no_maps; omap++) {
 		// double buffering of kernel weights
 		if(omap < start_map + no_maps - 1) {
 			if(use_dma) {
-				dma_array(p_edma, p_weight + (omap + 1) * no_inputs * 9, p_conv_ker_buff[(omap + 1) % 2], no_inputs * 9 * sizeof(FIX_KER));
+				dma_array(p_edma, p_weight + (omap + 1) * no_inputs * 81, p_conv_ker_buff[(omap + 1) % 2], no_inputs * 81 * sizeof(FIX_KER));
 			} else {
-				memcpy(p_conv_ker_buff[(omap + 1) % 2], p_weight + (omap + 1) * no_inputs * 9, no_inputs * 9 * sizeof(FIX_KER));
+				memcpy(p_conv_ker_buff[(omap + 1) % 2], p_weight + (omap + 1) * no_inputs * 81, no_inputs * 81 * sizeof(FIX_KER));
 			}
 		}
 		for(imap = 0; imap < no_inputs; imap++) {
+			// pad the 9x9 kernel to make 11x11. Since the buffer is already zero initialized, just copy the valid values
+			// into top left 9x9 locations
+			for(kr = 0; kr < 9; kr++) {
+				memcpy(padded_ker_9x9 + kr * 11, p_conv_ker_buff[omap % 2] + imap * 81 + kr * 9, 9 * sizeof(FIX_KER));
+			}
+
 			in_row = -pad;
-			memset(line_buff_ping, 0, 3 * pitch * sizeof(FIX_MAP));
+			memset(line_buff_ping, 0, 9 * pitch * sizeof(FIX_MAP));
 			for(out_row = 0; out_row < o_h; out_row++) {
 				// we will use memcpy to load the input rows from MSMC to L2. This onchip transfer is
 				// empirically found to be faster than EDMA for transfer sizes lesser than 4kB
-				if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 2)) {
+				if(is_a_ge_zero_and_a_lt_b(in_row, in_height - 8)) {
 					// need to load all K rows	starting at line_buff[0]
-					for(r = 0; r < 3; r++) {
+					for(r = 0; r < 9; r++) {
 						memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 					}
 				} else {
 					// Need to load only few rows
 					if(in_row < 0) { // need to load K + in_row number of rows starting at line buffer no
-						for(r = 0; r < 3 + in_row; r++) {
+						for(r = 0; r < 9 + in_row; r++) {
 							memcpy(p_line_buff[0][-in_row + r] + pad, p_input + (imap * in_height + r) * in_width, in_width * sizeof(FIX_MAP));
 						}
 					} else { // bottom end of input map
 						// reset the line buffers to mimic zero padding since it is overwritten by the input maps after initial reset.
-						memset(line_buff_ping, 0, 3 * pitch * sizeof(FIX_MAP));
+						memset(line_buff_ping, 0, 9 * pitch * sizeof(FIX_MAP));
 						for(r = 0; r < in_height - in_row; r++) {
 							memcpy(p_line_buff[0][r] + pad, p_input + (imap * in_height + in_row + r) * in_width, in_width * sizeof(FIX_MAP));
 						}
 					}
 				}
-#ifndef USE_IMG_CORR
-				IMG_conv_3x3_i16s_c16s(p_line_buff[0][0], // must be 16bit aligned
+				IMG_corr_11x11_i16s_c16s_short(p_line_buff[0][0],
 					p_temp_out_buff,	// must be 32bit aligned
-					o_w_x8,				// must be x2
-					pitch,				// must be x2
-					p_conv_ker_buff[omap % 2] + imap * 9,
+					o_w_x8,		// output width must be multiple of 4
+					pitch,			// pitch must be >= out_width
+					padded_ker_9x9,
 					shift
 					);
-#else
-				IMG_corr_3x3_i16s_c16s_short(p_line_buff[0][0], // must be 16bit aligned
-					p_temp_out_buff,	// must be 64bit aligned
-					o_w_x8,				// must be x4
-					pitch,				//
-					p_conv_ker_buff[omap % 2] + imap * 9,
-					shift
-					);
-#endif // USE_IMG_CORR
+
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move(p_temp_out_buff, o_w, stride);
@@ -160,8 +160,8 @@ STATUS_E dsp_fix_conv_3x3(FIX_MAP *p_input,	// pointer to input maps stored in f
 	return status;
 }
 
-// Use this when pad == 0 AND in_width % 2 == 0 AND weights are stored in on-chip memory
-STATUS_E dsp_fix_conv_3x3_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
+// Use this when pad == 0 AND weights are stored in on-chip memory
+STATUS_E dsp_fix_conv_9x9_constrained(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
 	int in_height,		// input feature map height
@@ -175,49 +175,40 @@ STATUS_E dsp_fix_conv_3x3_constrained(FIX_MAP *p_input,	// pointer to input maps
 	FIX_MAP *p_output	// pointer to output feature maps. Stored in [map][row][col] flattened manner.
 	) {
 
-	int o_h, o_w, omap, imap, o_w_x8, new_width;
+	int o_h, o_w, omap, imap, o_w_x8, new_width, kr;
 	int row;
+	FIX_KER padded_ker_9x9[121];
 	STATUS_E status = FAILED;
 
-	o_h = (in_height - 2 + stride - 1) / stride;
-	o_w = (in_width  - 2 + stride - 1) / stride;
+	o_h = (in_height - 8 + stride - 1) / stride;
+	o_w = (in_width  - 8 + stride - 1) / stride;
+	// The output width for  IMG_conv_11x11_i16s_c16s API must be multiple of 4.
+	new_width = in_width - 8;
+	new_width = (new_width % 2  == 0)? new_width : new_width + 1;
 
-	new_width = in_width - 2;
-#ifndef USE_IMG_CORR
-	// The output width for  IMG_conv_3x3_i16s_c16s API must be multiple of 2.
-	new_width = ((new_width & 0x1) == 0)? new_width : (new_width + 1);
-#else
-	// The output width for  IMG_corr_3x3_i16s_c16s_short API must be multiple of 4.
-		new_width = ((new_width & 0x3) == 0)? new_width : new_width + (4 - new_width % 4);
-#endif
 	// reset the output maps buffer; only the portion that belongs to this core.
 	memset(p_output + start_map * o_h * o_w, 0, o_h * o_w * no_maps * sizeof(FIX_MAP));
+	memset(padded_ker_9x9, 0, 121 * sizeof(FIX_KER));
 	// DSP_add16 required the array length to mubr x8
-	o_w_x8 = in_width - 2;
+	o_w_x8 = in_width - 8;
 	o_w_x8 = (o_w_x8 % 8 == 0)? o_w_x8 : o_w_x8 + (8 - o_w_x8 % 8);
 
 	for(omap = start_map; omap < start_map + no_maps; omap++) {
 		for(imap = 0; imap < no_inputs; imap++) {
-			for(row = 0; row < in_height - 2; row += stride) {
-#ifndef USE_IMG_CORR
-				IMG_conv_3x3_i16s_c16s(
-					p_input + (imap * in_height + row ) * in_width,
-					(FIX_MAP *)private_temp_buff,
-					new_width,
-					in_width,	// must be x2
-					p_weight + (omap * no_inputs + imap) * 9,
+			// pad the 9x9 kernel to make 11x11. Since the buffer is already zero initialized, just copy the valid values
+			// into top left 9x9 locations
+			for(kr = 0; kr < 9; kr++) {
+				memcpy(padded_ker_9x9 + kr * 11, p_weight + (omap * no_inputs + imap) * 81 + kr * 9, 9 * sizeof(FIX_KER));
+			}
+			for(row = 0; row < in_height - 8; row += stride) {
+				IMG_corr_11x11_i16s_c16s_short(
+					p_input + (imap * in_height + row ) * in_width,// must be 16bit aligned
+					(FIX_MAP *)private_temp_buff,// must be 32bit aligned
+					new_width,		// must be x4
+					in_width,		// pitch must be >= out_width
+					padded_ker_9x9,
 					shift
 					);
-#else
-				IMG_corr_3x3_i16s_c16s_short(
-					p_input + (imap * in_height + row ) * in_width,
-					(FIX_MAP *)private_temp_buff,	// 8 byte aligned
-					new_width,	// must be x4
-					in_width,
-					p_weight + (omap * no_inputs + imap) * 9,
-					shift
-					);
-#endif // USE_IMG_CORR
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move((FIX_MAP *)private_temp_buff, o_w, stride);

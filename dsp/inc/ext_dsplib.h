@@ -43,4 +43,35 @@ void DSP_fix_max_pool(
 		int n_cols,		//must be multiple of 8
 		short *restrict p_out
 		);
+
+void IMG_corr_3x3_i16s_c16s_short
+(
+    const  short    *restrict  imgin_ptr,
+           short      *restrict imgout_ptr,
+           short                   width,
+           short                   pitch,
+    const  short    *restrict   mask_ptr,
+           short                   shift
+);
+
+void IMG_corr_5x5_i16s_c16s_short
+(
+    const  short    *restrict  imgin_ptr,
+           short      *restrict imgout_ptr,
+           short                   width,
+           short                   pitch,
+    const  short    *restrict   mask_ptr,
+           short                   shift
+
+);
+
+void IMG_corr_11x11_i16s_c16s_short
+(
+    const  short    *restrict  imgin_ptr,
+           short      *restrict imgout_ptr,
+           short                   width,
+           short                   pitch,
+    const  short    *restrict   mask_ptr,
+           short                   shift
+);
 #endif /* INC_EXT_DSPLIB_H_ */

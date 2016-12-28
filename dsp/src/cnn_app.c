@@ -13,6 +13,7 @@
 extern uint32_t far *p_shared_dbuff1;
 extern unsigned int core_id;
 
+uint64_t layer_runtime[NO_DEEP_LAYERS];
 
 STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 	uint32_t nn_lyr;
@@ -144,7 +145,9 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 		// data synchronization btw layers
 		wait_for_maps(nn_lyr);
-
+		if(core_id == MASTER_CORE_ID) {
+			GET_TIME(&layer_runtime[nn_lyr]);
+		}
 		// data conversion is necessary
 		if((nn_lyr < NO_DEEP_LAYERS - 1) &&
 			(g_cnn_layer_nodes[nn_lyr + 1].lyr_type != SOFTMAX) &&
@@ -165,6 +168,12 @@ STATUS_E main_cnn_app(uint8_t *p_image, uint32_t *p_label) {
 
 	// reset the image init flag for this image
 	if(core_id == MASTER_CORE_ID) {
+		printf("----Layer-wise runtime info----\n");
+		for(nn_lyr = 0; nn_lyr < NO_DEEP_LAYERS; nn_lyr++) {
+			printf("Layer : %d\t Runtime(us) : %.4f\n", nn_lyr, (float)(layer_runtime[nn_lyr] - start_time)/DSP_FREQ_IN_MHZ);
+			start_time = layer_runtime[nn_lyr];
+		}
+
 		*p_label = find_max_index(p_float_input, no_outputs);
 		reset_layer_sync_cntr();
 		toggle_image_init_flag(image_cnt);

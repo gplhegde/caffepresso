@@ -51,7 +51,7 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 	int o_h, o_w, omap, imap, o_w_x8;
 	int pitch, in_row, out_row, r;
 	FIX_MAP *p_temp_out_buff;
-	Bool use_dma;
+	Bool use_dma, use_cpy;
 	EDMA_OBJ_T * p_edma;
 	STATUS_E status = FAILED;
 
@@ -68,6 +68,8 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 	// We will use EDMA only for off-chip memory transfer. Simple memcpy() is
 	// found to be faster than EDMA for small on-chip transfers.
 	use_dma = is_dram_addr((Uint32)p_weight);
+	use_cpy = is_msmc_addr((Uint32)p_weight);
+
 	p_edma = &shared_edma_obj[core_id * NO_CHANNELS_PER_CORE + 0];	// using second channel allocated for each core for weight transfer
 
 	for(r = 0; r < 11; r++) {
@@ -81,9 +83,12 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 	if(use_dma) {
 		dma_array(p_edma, p_weight + start_map * no_inputs * 121, p_conv_ker_buff[start_map % 2], no_inputs * 121 * sizeof(FIX_KER));
 		wait_for_dma_tx(p_edma, FALSE, FALSE);
-	} else {
+	} else if(use_cpy){
 		memcpy(p_conv_ker_buff[start_map % 2], p_weight + start_map * no_inputs * 121, no_inputs * 121 * sizeof(FIX_KER));
 
+	} else {
+		p_conv_ker_buff[0] = p_weight;
+		p_conv_ker_buff[1] = p_weight;
 	}
 
 	for(omap = start_map; omap < start_map + no_maps; omap++) {
@@ -91,7 +96,7 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 		if(omap < start_map + no_maps - 1) {
 			if(use_dma) {
 				dma_array(p_edma, p_weight + (omap + 1) * no_inputs * 121, p_conv_ker_buff[(omap + 1) % 2], no_inputs * 121 * sizeof(FIX_KER));
-			} else {
+			} else if(use_cpy){
 				memcpy(p_conv_ker_buff[(omap + 1) % 2], p_weight + (omap + 1) * no_inputs * 121, no_inputs * 121 * sizeof(FIX_KER));
 			}
 		}
@@ -120,6 +125,7 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 						}
 					}
 				}
+#ifndef USE_IMG_CORR
 				IMG_conv_11x11_i16s_c16s(p_line_buff[0][0],
 					p_temp_out_buff,	// must be 32bit aligned
 					o_w_x8,		// output width must be multiple of 4
@@ -127,7 +133,15 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 					p_conv_ker_buff[omap % 2] + imap * 121,
 					shift
 					);
-
+#else
+				IMG_corr_11x11_i16s_c16s_short(p_line_buff[0][0],
+					p_temp_out_buff,	// must be 32bit aligned
+					o_w_x8,		// output width must be multiple of 4
+					pitch,			// pitch must be >= out_width
+					p_conv_ker_buff[omap % 2] + imap * 121,
+					shift
+					);
+#endif
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move(p_temp_out_buff, o_w, stride);
@@ -146,6 +160,10 @@ STATUS_E dsp_fix_conv_11x11(FIX_MAP *p_input,	// pointer to input maps stored in
 		// wait for the previously initiated weight transfer
 		if((omap < start_map + no_maps - 1) && (use_dma == 1)) {
 			wait_for_dma_tx(p_edma, FALSE, FALSE);
+		}
+		if(use_dma == 0 && use_cpy == 0) {
+			p_conv_ker_buff[0] += (121 * no_inputs);
+			p_conv_ker_buff[1] += (121 * no_inputs);
 		}
 	}
 	return status;
@@ -185,6 +203,7 @@ STATUS_E dsp_fix_conv_11x11_constrained(FIX_MAP *p_input,	// pointer to input ma
 	for(omap = start_map; omap < start_map + no_maps; omap++) {
 		for(imap = 0; imap < no_inputs; imap++) {
 			for(row = 0; row < in_height - 10; row += stride) {
+#ifndef USE_IMG_CORR
 				IMG_conv_11x11_i16s_c16s(
 					p_input + (imap * in_height + row ) * in_width,// must be 16bit aligned
 					(FIX_MAP *)private_temp_buff,// must be 32bit aligned
@@ -193,6 +212,16 @@ STATUS_E dsp_fix_conv_11x11_constrained(FIX_MAP *p_input,	// pointer to input ma
 					p_weight + (omap * no_inputs + imap) * 121,
 					shift
 					);
+#else
+				IMG_corr_11x11_i16s_c16s_short(
+					p_input + (imap * in_height + row ) * in_width,// must be 16bit aligned
+					(FIX_MAP *)private_temp_buff,// must be 32bit aligned
+					new_width,		// must be x2
+					in_width,		// pitch must be >= out_width
+					p_weight + (omap * no_inputs + imap) * 121,
+					shift
+					);
+#endif
 				// throw unnecessary pixels to mimic column stride
 				if(stride != 1) {
 					strided_move((FIX_MAP *)private_temp_buff, o_w, stride);

@@ -32,8 +32,12 @@ void dsp_init() {
 	// Enable timers for profiling.
 	CSL_tscEnable();
 
+#ifdef USE_L2_CACHE
+	CACHE_setL2Size (CACHE_512KCACHE);
+#else
 	// We will not use L2 cache. We will manage L2 RAM to keep local variables specific to the core.
 	CACHE_setL2Size (CACHE_0KCACHE);
+#endif // USE_L2_CACHE
 
 	// Use L1 D cache
 	CACHE_setL1DSize(CACHE_L1_32KCACHE);

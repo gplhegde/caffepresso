@@ -145,7 +145,7 @@ void caffe_layer_ctx_init() {
 }
 
 // Internal parameter initialization apart from caffe prototxt config parameters.
-void cnn_layer_internal_param_init(void) {
+unsigned long  cnn_layer_internal_param_init(void) {
 	int lyr, conv_lyr, ip_lyr, bnorm_lyr;
 	CONV_LYR_CTX_T *p_conv_ctx;
 	POOL_LYR_CTX_T *p_pool_ctx;
@@ -154,9 +154,11 @@ void cnn_layer_internal_param_init(void) {
 	SMAX_LYR_CTX_T *p_smax_ctx;
 	BNORM_LYR_CTX_T *p_bnorm_ctx;
 	LYR_ARITH_MODE_E common_arith_mode;
-	int common_frac_bits, ker_frac_bits, map_frac_bits;
-
+	int common_frac_bits, ker_frac_bits, map_frac_bits, o_h, o_w;
+	unsigned long buff_req, max_buff_req;
 	conv_lyr = 0;
+	max_buff_req = 0;
+	buff_req = 0;
 	ip_lyr = 0;
 	bnorm_lyr = 0;
 	if(APP_ARITHMETIC_MODE) {
@@ -177,6 +179,11 @@ void cnn_layer_internal_param_init(void) {
 				p_conv_ctx->conv_info.no_ker_frac_bits = ker_frac_bits;
 				p_conv_ctx->conv_info.no_map_frac_bits = map_frac_bits;
 				p_conv_ctx->lyr_arith_mode = common_arith_mode;
+				o_h = (p_conv_ctx->conv_info.map_h + 2*p_conv_ctx->conv_info.pad -
+					p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
+				o_w = (p_conv_ctx->conv_info.map_w + 2*p_conv_ctx->conv_info.pad -
+					p_conv_ctx->conv_info.ker_size + 1 + p_conv_ctx->conv_info.stride - 1) / p_conv_ctx->conv_info.stride;
+				buff_req = p_conv_ctx->conv_info.no_outputs * o_h * o_w;
 #ifndef USE_RANDOM_MODEL
 				// Pointer to conv weights and biases, taken from the big network model arrays.
 				p_conv_ctx->p_flt_ker = conv_w_ptrs[conv_lyr];
@@ -187,10 +194,16 @@ void cnn_layer_internal_param_init(void) {
 			case POOL:
 				p_pool_ctx = (POOL_LYR_CTX_T *) g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_pool_ctx->lyr_arith_mode = common_arith_mode;
+				o_h = (p_pool_ctx->pool_info.map_h + 2*p_pool_ctx->pool_info.pad -
+					p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
+				o_w = (p_pool_ctx->pool_info.map_w + 2*p_pool_ctx->pool_info.pad -
+					p_pool_ctx->pool_info.win_size + 1 + p_pool_ctx->pool_info.stride - 1) / p_pool_ctx->pool_info.stride;
+				buff_req = p_pool_ctx->pool_info.no_inputs * o_h * o_w;
 				break;
 			case ACT:
 				p_act_ctx = (ACT_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_act_ctx->lyr_arith_mode = common_arith_mode;
+				buff_req = p_act_ctx->act_info.map_h * p_act_ctx->act_info.map_w *p_act_ctx->act_info.no_outputs;
 				break;
 			case BATCH_NORM:
 				p_bnorm_ctx = (BNORM_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
@@ -201,6 +214,7 @@ void cnn_layer_internal_param_init(void) {
 #endif
 				p_bnorm_ctx->bnorm_info.no_ker_frac_bits = ker_frac_bits;
 				p_bnorm_ctx->bnorm_info.no_map_frac_bits = map_frac_bits;
+				buff_req = p_bnorm_ctx->bnorm_info.map_h * p_bnorm_ctx->bnorm_info.map_w * p_bnorm_ctx->bnorm_info.no_outputs;
 				bnorm_lyr++;
 				break;
 			case INNER_PROD:
@@ -209,6 +223,7 @@ void cnn_layer_internal_param_init(void) {
 				p_ip_ctx->ip_info.no_ker_frac_bits = ker_frac_bits;
 				p_ip_ctx->ip_info.no_map_frac_bits = map_frac_bits;
 				p_ip_ctx->lyr_arith_mode = common_arith_mode;
+				buff_req = p_ip_ctx->ip_info.map_h * p_ip_ctx->ip_info.map_w * p_ip_ctx->ip_info.no_outputs;
 #ifndef USE_RANDOM_MODEL
 				// Pointer to FC layer weights and biases, taken from the big network model arrays.
 				p_ip_ctx->p_flt_weight = ip_w_ptrs[ip_lyr];
@@ -219,11 +234,16 @@ void cnn_layer_internal_param_init(void) {
 			case SOFTMAX:
 				p_smax_ctx = (SMAX_LYR_CTX_T *)g_cnn_layer_nodes[lyr].p_lyr_ctx;
 				p_smax_ctx->lyr_arith_mode = FLOAT_POINT; // No fixed point mode supported for SOFTMAX as of now.
+				buff_req = p_smax_ctx->no_inputs;
 				break;
 			default:
 				REL_INFO("Invalid layer type");
 		}
+		if(buff_req > max_buff_req) {
+			max_buff_req = buff_req;
+		}
 	}
+	return max_buff_req;
 }
 
 

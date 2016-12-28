@@ -93,10 +93,6 @@ STATUS_E dsp_fix_conv_layer_unoptimized(FIX_MAP *p_input,	// pointer to input ma
 	return status;
 }
 
-#define PADDING_SUPPORT 0
-#define CONV_BUFFERING 0
-#define CONV_EDMA 0
-
 STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in flattened [maps][row][col] format.
 	FIX_KER *p_weight,	// pointer to kernels stored in flattened [no_outputs][no_inputs][ker_size][ker_size] format
 	FIX_KER *p_bias,	// pointer to bias units. there are 'no_outputs' bias units
@@ -137,6 +133,13 @@ STATUS_E dsp_fix_conv_layer(FIX_MAP *p_input,	// pointer to input maps stored in
 				status = dsp_fix_conv_7x7_constrained(p_input, p_weight, p_bias, in_height, in_width, no_inputs, no_outputs, start_map, no_maps, stride, shift, p_output);
 			} else {
 				status = dsp_fix_conv_7x7(p_input, p_weight, p_bias, in_height, in_width, no_inputs, no_outputs, start_map, no_maps, pad, stride, shift, p_output);
+			}
+			break;
+		case 9:
+			if(pad == 0 && w_ocm == 1) {
+				status = dsp_fix_conv_9x9_constrained(p_input, p_weight, p_bias, in_height, in_width, no_inputs, no_outputs, start_map, no_maps, stride, shift, p_output);
+			} else {
+				status = dsp_fix_conv_9x9(p_input, p_weight, p_bias, in_height, in_width, no_inputs, no_outputs, start_map, no_maps, pad, stride, shift, p_output);
 			}
 			break;
 		case 11:
