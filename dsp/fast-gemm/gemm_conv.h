@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include "config.h"
 
-#define GEMM_ARITHMETIC_MODE	0
+
 // Output matrix row must be multiple of 2
 #define GEMM_CONV_IN_ROW_FACTOR	(2)
 

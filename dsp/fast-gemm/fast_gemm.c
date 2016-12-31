@@ -17,21 +17,18 @@
 #include "edma_module.h"
 #include "config.h"
 #include "data_sync.h"
+#include "gemm_conv.h"
+#include "conv_gemm_params.h"
+#include "caffe_proto_params.h"
 
 //---------------------------------------------------------------------------------------------------------------------
-#define MAT_R1_SCALE_FACTOR		(256)
-#define MAT_C1_SCALE_FACTOR		(256)
-#define MAT_C2_SCALE_FACTOR		(256)
-#define MAT_R1_SIZE				(L1_BLOCK_SIZE * MAT_R1_SCALE_FACTOR)
-#define MAT_C1_SIZE				(L1_BLOCK_SIZE * MAT_C1_SCALE_FACTOR)
-#define MAT_C2_SIZE				(L1_BLOCK_SIZE * MAT_C2_SCALE_FACTOR)
+
+#define MAT_R1_SIZE				(256)
+#define MAT_C1_SIZE				(MAX_L2_FIX_PANEL_WIDTH)
+#define MAT_C2_SIZE				(21000)
+#define MAX_INPUT_MAP_BUFF_SIZE	(384 * 512)
 //---------------------------------------------------------------------------------------------------------------------
 
-#ifdef FIXED_POINT_GEMM
-typedef  short DTYPE;
-#else
-typedef  float DTYPE;
-#endif
 
 extern unsigned int core_id;
 
@@ -48,29 +45,33 @@ uint8_t mat_a[MAT_R1_SIZE * MAT_C1_SIZE * ELEMENT_SIZE];
 #pragma DATA_SECTION(mat_b, ".ddr_data");
 #pragma DATA_ALIGN(mat_b, 8);
 uint8_t mat_b[MAT_C1_SIZE * MAT_C2_SIZE * ELEMENT_SIZE];
+// Since the output matrix in the normal conv based approach, mimic the same here
 #pragma DATA_SECTION(mat_c, ".ddr_data");
 #pragma DATA_ALIGN(mat_c, 8);
 uint8_t mat_c[MAT_R1_SIZE * MAT_C2_SIZE * ELEMENT_SIZE];
+
 #pragma DATA_SECTION(mat_c_ref, ".ddr_data");
 #pragma DATA_ALIGN(mat_c_ref, 8);
 uint8_t mat_c_ref[MAT_R1_SIZE * MAT_C2_SIZE * ELEMENT_SIZE];
 
+#pragma DATA_SECTION(bias_array, ".ddr_data");
+#pragma DATA_ALIGN(bias_array, 8);
+uint8_t bias_array[512 * ELEMENT_SIZE];
+
+// Place to store input maps. Since we store input maps and output maps on the MSMC in normal conv based approach,
+// mimic the same thing here. However, we cannot afford to store unrolled input matrices on MSMC. It will be
+// on DDR (mat_b)
+#pragma DATA_SECTION(conv_input_maps, ".ddr_data");
+#pragma DATA_ALIGN(conv_input_maps, 8);
+uint8_t conv_input_maps[MAX_INPUT_MAP_BUFF_SIZE * ELEMENT_SIZE];
 // Used to store a vertical panel of matrix B which is shared by all cores.
-#if 1
+
 #pragma DATA_SECTION(panel_b_msmc_ping, ".msmc_data");
 #pragma DATA_ALIGN(panel_b_msmc_ping, 8);
 uint8_t panel_b_msmc_ping[MAX_MSMC_PANEL_HEIGHT][MAX_MSMC_PANEL_WIDTH * ELEMENT_SIZE];
 #pragma DATA_SECTION(panel_b_msmc_pong, ".msmc_data");
 #pragma DATA_ALIGN(panel_b_msmc_pong, 8);
 uint8_t panel_b_msmc_pong[MAX_MSMC_PANEL_HEIGHT][MAX_MSMC_PANEL_WIDTH * ELEMENT_SIZE];
-
-// Used to store output of all cores - 1 block per core and then DMA back to DDR
-#pragma DATA_SECTION(nblk_c_msmc_ping, ".msmc_data");
-#pragma DATA_ALIGN(nblk_c_msmc_ping, 8);
-uint8_t nblk_c_msmc_ping[NO_GEMM_CORES][MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
-#pragma DATA_SECTION(nblk_c_msmc_pong, ".msmc_data");
-#pragma DATA_ALIGN(nblk_c_msmc_pong, 8);
-uint8_t nblk_c_msmc_pong[NO_GEMM_CORES][MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
 
 // Private L2 SRAM buffers for storing 2 horizontal panel of matrix A
 #pragma DATA_SECTION(panel_a_l2_ping, ".l2_data");
@@ -80,14 +81,6 @@ uint8_t panel_a_l2_ping[MAX_L2_PANEL_HEIGHT][MAX_L2_PANEL_WIDTH * ELEMENT_SIZE];
 #pragma DATA_ALIGN(panel_a_l2_pong, 8);
 uint8_t panel_a_l2_pong[MAX_L2_PANEL_HEIGHT][MAX_L2_PANEL_WIDTH * ELEMENT_SIZE];
 
-// L2 SRAM buffer for buffering 2 blocks of matrix B from MSMC - on the way to L1 SRAM
-#pragma DATA_SECTION(blk_b_l2_ping, ".l2_data");
-#pragma DATA_ALIGN(blk_b_l2_ping, 8);
-uint8_t blk_b_l2_ping[MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
-#pragma DATA_SECTION(blk_b_l2_pong, ".l2_data");
-#pragma DATA_ALIGN(blk_b_l2_pong, 8);
-uint8_t blk_b_l2_pong[MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
-#endif
 //----------------------------
 // Private L1 SRAM buffers to store 2-blocks of mat a,b,c
 #pragma DATA_SECTION(blk_a_l1_ping, ".l1_data");
@@ -114,6 +107,8 @@ uint8_t blk_c_l1_pong[MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
 uint8_t blk_par_prod[MAX_L1_BLOCK_SIZE][MAX_L1_BLOCK_SIZE * ELEMENT_SIZE];
 
 //---------------------------------------------------------------------------------------------------------------------
+#pragma DATA_SECTION(gemm_conv_ctx, ".msmc_data");
+GEMM_CTX_T gemm_conv_ctx;
 
 Bool verify_result(DTYPE *p_mat, DTYPE *p_ref, int R, int C) {
 	int r, c;
@@ -121,7 +116,7 @@ Bool verify_result(DTYPE *p_mat, DTYPE *p_ref, int R, int C) {
 
 	for(r = 0; r < R; r++) {
 		for(c = 0; c < C; c++) {
-#ifdef FIXED_POINT_GEMM
+#if FIXED_POINT_GEMM
 			if(abs(p_mat[r * C + c] - p_ref[r * C + c]) > 1) {
 				printf("Data mismatch at (%d, %d) : Act : %d\tRef : %d\n", r, c, p_mat[r * C + c], p_ref[r * C + c]);
 				flag = FALSE;
@@ -141,7 +136,7 @@ Bool verify_result(DTYPE *p_mat, DTYPE *p_ref, int R, int C) {
 
 void ref_gemm(DTYPE *p_mat_a, DTYPE *p_mat_b, int r1, int c1, int c2, DTYPE *p_mat_c, int shift) {
 	int m, k, n;
-#ifdef FIXED_POINT_GEMM
+#if FIXED_POINT_GEMM
 	int32_t sum;
 #else
 	float sum;
@@ -156,7 +151,7 @@ void ref_gemm(DTYPE *p_mat_a, DTYPE *p_mat_b, int r1, int c1, int c2, DTYPE *p_m
 			for(k = 0; k < c1; k++) {
 				sum += p_mat_a[m * c1 + k] * p_mat_b[k * c2 + n];
 			}
-#ifdef FIXED_POINT_GEMM
+#if FIXED_POINT_GEMM
 			p_mat_c[m * c2 + n] = (DTYPE)(sum >> shift);
 #else
 			p_mat_c[m * c2 + n] = sum;
@@ -333,7 +328,7 @@ void print_mat(DTYPE *p_mat, int R, int C) {
 	printf("--------------------------------------------\n");
 	for(r = 0; r < R; r++) {
 		for(c = 0; c < C; c++) {
-#ifdef FIXED_POINT_GEMM
+#if FIXED_POINT_GEMM
 			printf("%d\t", p_mat[r * C +c]);
 #else
 			printf("%.0f\t", p_mat[r * C +c]);
@@ -464,7 +459,7 @@ void blk_blk_fgemm(DTYPE *p_mat_a, DTYPE *p_mat_b, int r1, int c1, int c2, DTYPE
 				}
 
 				//=============Core compute block using DSPLIB==============
-#ifdef FIXED_POINT_GEMM
+#if FIXED_POINT_GEMM
 				// Compute block X block using DSPLIB API - all inputs and output into buffer in L1
 				DSP_mat_mul(p_l1_blk_a[blk % 2], L1_BLOCK_SIZE, L1_BLOCK_SIZE, p_l1_blk_b[blk % 2], L1_BLOCK_SIZE, p_blk_par_prod, 8);
 				// Add the partial result to the block accumulator C
@@ -524,11 +519,12 @@ void blk_blk_fgemm(DTYPE *p_mat_a, DTYPE *p_mat_b, int r1, int c1, int c2, DTYPE
 	}
 	// wait for the transfer completion of the last output block
 	wait_for_blk_c_tx(p_edma_c_blk);
+	L1_CACHE_WB(p_c + start_row * R1, R1 * C2 * sizeof(DTYPE), CACHE_WAIT);
 }
 
 
 
-#define VERIFY_RESULT 1
+#define VERIFY_RESULT 0
 void run_flt_fast_gemm_bmark() {
 	int size, blk_size, base_blk_size, factor, no_steps;
 	int step;
@@ -539,13 +535,14 @@ void run_flt_fast_gemm_bmark() {
 
 	base_blk_size = L1_BLOCK_SIZE;
 	factor = 2;
-	no_steps = 7;
+	no_steps = 9;
 	printf("==============================================================\n");
 	printf("BLK_SIZE,R1,C1,C2,CYCLES,GOPS\n");
 
 	for(blk_size = base_blk_size; blk_size <= L1_BLOCK_SIZE; blk_size += 4) {
 		size = blk_size;
-		for(step = 0; step < no_steps; step++) {
+		step = 0;
+		while(size <= MAT_R1_SIZE) {
 			//printf("C_%d : Step = %d\n", core_id, step);
 			if (core_id != MASTER_CORE_ID) {
 				wait_for_image_init(step);
@@ -553,7 +550,7 @@ void run_flt_fast_gemm_bmark() {
 #if VERIFY_RESULT
 				generate_random_data((DTYPE *)mat_a, size * size, size+123);
 				generate_random_data((DTYPE *)mat_b, size * size, size+456);
-#ifdef 	FIXED_POINT_GEMM
+#if 	FIXED_POINT_GEMM
 				ref_gemm((DTYPE *)mat_a, (DTYPE *)mat_b, size, size, size, (DTYPE *)mat_c_ref, 8);
 #else
 				ref_gemm((DTYPE *)mat_a, (DTYPE *)mat_b, size, size, size, (DTYPE *)mat_c_ref, 0);
@@ -561,7 +558,8 @@ void run_flt_fast_gemm_bmark() {
 #endif // FIXED_POINT_GEMM
 #endif // VERIFY_RESULT
 				reset_panel_copy_flags();
-				reset_panel_use_cntr();
+				reset_panel_use_cntr(0);
+				reset_panel_use_cntr(1);
 				//print_mat((DTYPE *)mat_c_ref, size, size);
 				toggle_image_init_flag(step);
 				start_time = CSL_tscRead();
@@ -586,7 +584,7 @@ void run_flt_fast_gemm_bmark() {
 				runtime = end_time - start_time;
 				gops = size/(float)runtime;
 				gops *= size;
-				gops *= (size * 2 * 1.35167993);
+				gops *= (size * 2 * DSP_FREQ_GHZ);
 
 				printf("%d,%d,%d,%d,%lld,%E\n", blk_size, size, size, size, runtime, gops);
 #if VERIFY_RESULT
@@ -597,16 +595,192 @@ void run_flt_fast_gemm_bmark() {
 				}
 #endif // VERIFY_RESULT
 				toggle_image_init_flag(step);
+				reset_layer_sync_cntr();
 			}
-			size *= factor;
+			step++;
+			size += L1_BLOCK_SIZE;
 		}
 	}
 	printf("C_%d : GEMM benchmark complete----------------\n", core_id);
 }
 
+void gemm_conv_ctx_init(int r1, int c1, int c2) {
+	int rem;
+
+	// make sure that the final matrix dims are abiding constraints from low level API
+	rem = r1 % L1_BLOCK_SIZE;
+	if(rem != 0) {
+		r1 += (L1_BLOCK_SIZE - rem);
+	}
+
+	rem = c1 % L1_BLOCK_SIZE;
+	if(rem != 0) {
+		c1 += (L1_BLOCK_SIZE - rem);
+	}
+	rem = c2 % L1_BLOCK_SIZE;
+	if(rem != 0) {
+		c2 += (L1_BLOCK_SIZE - rem);
+	}
+
+	REL_ASSERT(r1 <= MAT_R1_SIZE);
+	REL_ASSERT(c1 <= MAT_C1_SIZE);
+	REL_ASSERT(c2 <= MAT_C2_SIZE);
+
+	gemm_conv_ctx.r1 = r1;
+	gemm_conv_ctx.c1 = c1;
+	gemm_conv_ctx.c2 = c2;
+
+	gemm_conv_ctx.no_map_frac_bits = 8;
+	gemm_conv_ctx.no_ker_frac_bits = 0;
+
+
+	gemm_conv_ctx.p_input_1 = (DTYPE *)mat_a;
+	gemm_conv_ctx.p_input_2 = (DTYPE *)mat_b;
+	gemm_conv_ctx.p_output = (DTYPE *)mat_c;
+	gemm_conv_ctx.p_bias = (DTYPE *)bias_array;
+}
+
+void get_output_dim(CAFFE_LYR_PARAM_T *p_lyr, int n_imaps, int in_h, int in_w, int *n_omaps, int *o_h, int *o_w) {
+	switch(p_lyr->lyrType) {
+		case CONV:
+			*o_h = ( in_h + 2*p_lyr->pad - p_lyr->K) / p_lyr->stride + 1;
+			*o_w = ( in_w + 2*p_lyr->pad - p_lyr->K) / p_lyr->stride + 1;
+			*n_omaps = p_lyr->nOutMaps;
+			break;
+		case POOL:
+			*o_h = ( in_h + 2*p_lyr->pad - p_lyr->winSize) / p_lyr->stride + 1;
+			*o_w = ( in_w + 2*p_lyr->pad - p_lyr->winSize) / p_lyr->stride + 1;
+			*n_omaps = n_imaps;
+			break;
+		case ACT:
+			*n_omaps = n_imaps;
+			*o_w = in_w;
+			*o_h = in_h;
+			break;
+		case BATCH_NORM:
+			*n_omaps = n_imaps;
+			*o_w = in_w;
+			*o_h = in_h;
+			break;
+		case INNER_PROD:
+			*n_omaps = 1;
+			*o_w = in_h * in_w;
+			*o_h = 1;
+			break;
+		default:
+	}
+}
+
+void run_fast_gemm_conv_bmark() {
+	int gemm, n_ch, in_h, in_w, K, stride, pad, n_omaps, out_w, out_h;
+	volatile DTYPE read_back;
+	double gops, time_us;
+	uint64_t start_time, end_time, runtime, unroll_start, unroll_end;
+	CAFFE_LYR_PARAM_T *p_conv_param;
+
+	printf("==============================================================\n");
+	printf("BLK_SIZE,R1(original r1),C1(original c1),C2(original c2),IMG2COL-CYCLES, IMG2COL-RUNTIME, GEMM-CYCLES, GEMM-RUNTIME(us), GOPS\n");
+
+	gemm = 0;
+	n_ch = NO_INPUT_MAPS;
+	in_h = INPUT_IMG_HEIGHT;
+	in_w = INPUT_IMG_WIDTH;
+	p_conv_param = cnn_param_table;
+
+	get_output_dim(p_conv_param, n_ch, in_h, in_w, &n_omaps, &out_h, &out_w);
+	while(gemm < NO_GEMMS) {
+		if (core_id != MASTER_CORE_ID) {
+			wait_for_image_init(gemm);
+			L1_CACHE_INV((void *)&gemm_conv_ctx, L1_CACHE_LINE_SIZE, CACHE_WAIT);
+		} else {
+			// init the matrix size, make them multiple of block sizes
+			gemm_conv_ctx_init(caltech101_A_height[gemm], caltech101_A_width[gemm], caltech101_B_width[gemm]);
+
+			while(p_conv_param->lyrType != CONV) {
+				get_output_dim(p_conv_param, n_ch, in_h, in_w, &n_omaps, &out_h, &out_w);
+				p_conv_param++;
+				n_ch = n_omaps;
+				in_h = out_h;
+				in_w = out_w;
+			}
+			K = p_conv_param->K;
+			pad = p_conv_param->pad;
+			stride = p_conv_param->stride;
+			get_output_dim(p_conv_param, n_ch, in_h, in_w, &n_omaps, &out_h, &out_w);
+
+			REL_ASSERT(n_ch * in_h * in_w <= MAX_INPUT_MAP_BUFF_SIZE);
+
+			// input map unroll
+			unroll_start =  CSL_tscRead();
+			img2col((DTYPE *)conv_input_maps, gemm_conv_ctx.p_input_2,
+				n_ch,
+				in_h,
+				in_w,
+				K,
+				stride,
+				pad,
+				gemm_conv_ctx.c1 - caltech101_A_width[gemm],	// extra zero rows of B
+				gemm_conv_ctx.c2 - caltech101_B_width[gemm]	// extra zero cols of B
+				);
+			unroll_end =  CSL_tscRead();
+
+			// this is not needed if the MSMC region is set to write through.
+			L1_CACHE_WB((void *)&gemm_conv_ctx, L1_CACHE_LINE_SIZE, CACHE_WAIT);
+			reset_panel_copy_flags();
+			reset_panel_use_cntr(0);
+			reset_panel_use_cntr(1);
+			toggle_image_init_flag(gemm);
+			start_time = CSL_tscRead();
+		}
+
+		blk_blk_fgemm((DTYPE *)gemm_conv_ctx.p_input_1, (DTYPE *)gemm_conv_ctx.p_input_2,
+			gemm_conv_ctx.r1, gemm_conv_ctx.c1, gemm_conv_ctx.c2, (DTYPE *)gemm_conv_ctx.p_output);
+
+		// signal the completion of portion of  the output
+		signal_lyr_completion(gemm);
+
+		// wait for all cores / portions of output
+		wait_for_maps(gemm);
+
+		read_back = mat_c[gemm_conv_ctx.r1 * gemm_conv_ctx.c2 - 1];
+		if(core_id == MASTER_CORE_ID) {
+			end_time = CSL_tscRead();
+
+			// Since DMA has written into DDR, invalidate matrix C from L1D before reading during result verification.
+			L1_CACHE_INV(mat_c, gemm_conv_ctx.r1 * gemm_conv_ctx.c2 * sizeof(DTYPE), CACHE_WAIT);
+			//print_mat((DTYPE *)mat_c, size, size);
+			runtime = end_time - start_time;
+			gops = gemm_conv_ctx.r1/(float)runtime;
+			gops *= gemm_conv_ctx.c1;
+			gops *= (gemm_conv_ctx.c2 * 2 * DSP_FREQ_GHZ);
+			time_us = (double)runtime / DSP_FREQ_MHZ;
+			printf("%d, %d(%d), %d(%d), %d(%d), %lld, %.4f, %lld, %.4f, %E\n", L1_BLOCK_SIZE,
+				gemm_conv_ctx.r1, caltech101_A_height[gemm],
+				gemm_conv_ctx.c1, caltech101_A_width[gemm],
+				gemm_conv_ctx.c2, caltech101_B_width[gemm],
+				(unroll_end - unroll_start),
+				(double)(unroll_end - unroll_start) / DSP_FREQ_MHZ,
+				runtime, time_us, gops);
+
+			toggle_image_init_flag(gemm);
+			reset_layer_sync_cntr();
+
+			p_conv_param++;
+			in_h = out_h;
+			in_w = out_w;
+			n_ch = n_omaps;
+		}
+		gemm++;
+
+	}
+	//printf("C_%d : GEMM based convolution benchmark complete----------------\n", core_id);
+}
+
+
 void run_fast_gemm_bmark() {
 	//run_flt_fgemm_compute_bmark();
 	//run_flt_gemm_compute_bmark();
-	run_flt_fast_gemm_bmark();
+	//run_flt_fast_gemm_bmark();
+	run_fast_gemm_conv_bmark();
 }
 

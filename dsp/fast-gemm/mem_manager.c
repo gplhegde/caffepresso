@@ -22,6 +22,7 @@ void * shared_malloc(size_t size) {
 
 	if (p_new_free > (char *)MSMC_SHARED_SRAM_END) {
 		printf("Cannot allocate memory on MSMC RAM\n");
+		exit(-1);
 		return NULL;
 	}
 	ptr = p_shared_cur_free;
@@ -59,6 +60,7 @@ void * ext_malloc(size_t size) {
 
 	if (p_new_free > (char *)DDR_SHARED_DRAM_END) {
 		printf("Cannot allocate memory DDR\n");
+		exit(-1);
 		return NULL;
 	}
 	ptr = p_ext_cur_free;

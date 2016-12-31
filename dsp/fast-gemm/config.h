@@ -10,6 +10,10 @@
 #include <assert.h>
 #define DSP_FREQ_GHZ	(1.35167993)
 
+#define DSP_FREQ_MHZ	(1351.67993)
+
+#define FIXED_POINT_GEMM	1
+
 #define MASTER_CORE_ID (0)
 
 #define L1_CACHE_LINE_SIZE (64)
@@ -26,4 +30,9 @@ typedef int16_t FIX_MAP;
 
 typedef float FLT_MAP;
 
+#if FIXED_POINT_GEMM
+typedef short DTYPE;
+#else
+typedef float DTYPE;
+#endif
 #endif /* CONFIG_H_ */

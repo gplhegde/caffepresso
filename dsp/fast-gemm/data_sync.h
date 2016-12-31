@@ -96,4 +96,7 @@ void wait_for_image_init(uint32_t img_cnt);
 void toggle_image_init_flag(uint32_t img_cnt);
 void toggle_panel_copy_flag(uint32_t panel_no);
 void wait_for_panel_copy(uint32_t panel_no);
+void signal_panel_use(uint32_t panel_no);
+void reset_panel_copy_flags();
+void reset_panel_use_cntr(uint32_t cntr_no);
 #endif /* _DATA_SYNC_H_ */

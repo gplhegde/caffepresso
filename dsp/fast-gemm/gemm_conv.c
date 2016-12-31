@@ -9,11 +9,13 @@
 #include <ti/csl/csl_tsc.h>
 #include "data_sync.h"
 #include <stdio.h>
+#include "config.h"
 #include "mem_manager.h"
 
 
 #define GEMM_BMARK_START_SIZE	(16)
-#define GEMM_BMARK_NO_CASES		(5)
+#define GEMM_BMARK_NO_CASES		(7)
+#define MAX_MAT_SIZE			(1024)
 
 extern unsigned int core_id;
 
@@ -83,6 +85,7 @@ void dsp_fix_gemm_conv(FIX_MAP * restrict p_a,
 		// This should be fine since it is point-wise operation.
 		DSP_vs_add16_unroll_4(p_c + r * P, p_bias[r], p_c + r * P, P);
 	}
+	L1_CACHE_WB(p_c + start_row * P, b_m * P * sizeof(FIX_MAP), CACHE_WAIT);
 }
 
 // GEMM based floating point convolution with multi-core support
@@ -110,6 +113,7 @@ void dsp_flt_gemm_conv(FLT_MAP *restrict p_a,
 		// This should be fine since it is point-wise operation.
 		DSPF_vs_add_unroll_4(p_c + r * P, p_bias[r], p_c + r * P, P);
 	}
+	L1_CACHE_WB(p_c + start_row * P, b_m * P * sizeof(FLT_MAP), CACHE_WAIT);
 }
 
 /*
@@ -144,6 +148,7 @@ void dsp_fix_gemm(FIX_MAP * restrict p_a,
 	//printf("C_%d : start_row = %d\tno_rows = %d\n", core_id, start_row, b_m);
 	// perform GEMM
 	DSP_mat_mul(p_a + start_row * N, b_m, N, p_b, P, p_c + start_row * P, shift);
+	L1_CACHE_WB(p_c + start_row * P, b_m * P * sizeof(FIX_MAP), CACHE_WAIT);
 }
 
 void dsp_flt_gemm(FLT_MAP *restrict p_a,
@@ -163,7 +168,7 @@ void dsp_flt_gemm(FLT_MAP *restrict p_a,
 	//printf("C_%d : start_row = %d\tno_rows = %d\n", core_id, start_row, b_m);
 	DSPF_sp_mat_mul(p_a + start_row * N, b_m, N, p_b, P, p_c + start_row * P);
 
-	//L1_CACHE_WB(p_c + start_row * P, b_m * P * sizeof(FLT_MAP), CACHE_WAIT);
+	L1_CACHE_WB(p_c + start_row * P, b_m * P * sizeof(FLT_MAP), CACHE_WAIT);
 
 }
 // Only called by master core
@@ -192,25 +197,27 @@ void setup_gemm_ctx(int r1, int c1, int c2) {
 	gemm_ctx.no_map_frac_bits = 8;
 	gemm_ctx.no_ker_frac_bits = 0;
 
-	element_size = sizeof(FLT_MAP);	// allocate extra buffer to initially generate random data
+	element_size = sizeof(DTYPE);	// allocate extra buffer to initially generate random data
 
-	gemm_ctx.p_input_1 = shared_malloc(gemm_ctx.r1 * gemm_ctx.c1 * element_size);
-	gemm_ctx.p_input_2 = shared_malloc(gemm_ctx.c1 * gemm_ctx.c2 * element_size);
-	gemm_ctx.p_output = shared_malloc(gemm_ctx.r1 * gemm_ctx.c2 * element_size);
+	gemm_ctx.p_input_1 = ext_malloc(gemm_ctx.r1 * gemm_ctx.c1 * element_size);
+	gemm_ctx.p_input_2 = ext_malloc(gemm_ctx.c1 * gemm_ctx.c2 * element_size);
+	gemm_ctx.p_output = ext_malloc(gemm_ctx.r1 * gemm_ctx.c2 * element_size);
+	gemm_ctx.p_bias = ext_malloc(gemm_ctx.r1  * element_size);
 
 
 }
 
-
+#define COMPARE_RESULT 0
 void run_gemm_bmark() {
 	int gemm, i, common_mat_size;
-	uint64_t start_time, end_time;
-	float gops;
+	uint64_t start_time, end_time, cycles;
+	double gops, runtime;
 	FLT_MAP *p_out, *p_ref;
 
 	gemm = 0;
 	common_mat_size = GEMM_BMARK_START_SIZE;
-	while (gemm < GEMM_BMARK_NO_CASES) {
+	printf("R1, C1, C2, CYCLES, RUNTIME(us), GOPS\n");
+	while (common_mat_size <= MAX_MAT_SIZE) {
 		if(core_id != MASTER_CORE_ID) {
 			// other cores wait for the gemm context initialized by the master
 			// Making use of same global counter which is used for inference of images.
@@ -223,40 +230,43 @@ void run_gemm_bmark() {
 			// random matrix for testing purposes
 			generate_random_data((FLT_MAP *)gemm_ctx.p_input_2, gemm_ctx.c1 * gemm_ctx.c2, 123);
 
-			if(GEMM_ARITHMETIC_MODE) {
+#if FIXED_POINT_GEMM
 				// set matrix 1 to be identity matrix so that we can compare the output to be same as matrix 2
 				get_fix_eye_matrix(gemm_ctx.p_input_1, gemm_ctx.r1, gemm_ctx.c1);
 				float_to_fix_data((FLT_MAP *)gemm_ctx.p_input_2, gemm_ctx.c1 * gemm_ctx.c2, gemm_ctx.no_map_frac_bits, (FIX_MAP *)gemm_ctx.p_input_2);
-			} else {
-				get_flt_eye_matrix((FLT_MAP *)gemm_ctx.p_input_1, gemm_ctx.r1, gemm_ctx.c1);
-			}
+#else
 
-			memset(gemm_ctx.p_output, 0, gemm_ctx.r1 * gemm_ctx.c2 * sizeof(FLT_MAP));
-			printf("Matrix dim : MxNxP = %d x %d x %d\n", gemm_ctx.r1, gemm_ctx.c1, gemm_ctx.c2);
+				get_flt_eye_matrix((FLT_MAP *)gemm_ctx.p_input_1, gemm_ctx.r1, gemm_ctx.c1);
+#endif
+
+			memset(gemm_ctx.p_output, 0, gemm_ctx.r1 * gemm_ctx.c2 * sizeof(DTYPE));
+
 			toggle_image_init_flag(gemm);
 			start_time = CSL_tscRead();
 		}
 
 		// perform GEMM
-		if(GEMM_ARITHMETIC_MODE) { // fixed point
-			dsp_fix_gemm((FIX_MAP*)gemm_ctx.p_input_1,
+#if FIXED_POINT_GEMM
+			dsp_fix_gemm_conv((FIX_MAP*)gemm_ctx.p_input_1,
 				(FIX_MAP*)gemm_ctx.p_input_2,
+				(FIX_MAP *)gemm_ctx.p_bias,
 				gemm_ctx.r1,
 				gemm_ctx.c1,
 				gemm_ctx.c2,
 				gemm_ctx.no_ker_frac_bits,
 				(FIX_MAP*)gemm_ctx.p_output
 				);
-		} else {
-			dsp_flt_gemm((FLT_MAP*)gemm_ctx.p_input_1,
+#else
+			dsp_flt_gemm_conv((FLT_MAP*)gemm_ctx.p_input_1,
 				(FLT_MAP*)gemm_ctx.p_input_2,
+				(FLT_MAP *)gemm_ctx.p_bias,
 				gemm_ctx.r1,
 				gemm_ctx.c1,
 				gemm_ctx.c2,
 				(FLT_MAP*)gemm_ctx.p_output
 				);
 
-		}
+#endif
 		// using same flags as the CNN app for data sync
 		signal_lyr_completion(0);
 
@@ -266,12 +276,18 @@ void run_gemm_bmark() {
 		if(core_id == MASTER_CORE_ID) {
 			end_time = CSL_tscRead();
 			// get the runtime
-			//L1_CACHE_INV(gemm_ctx.p_output, gemm_ctx.r1 * gemm_ctx.c2 * sizeof(FLT_MAP), CACHE_WAIT);
-			gops = ((gemm_ctx.r1 * gemm_ctx.c1 * gemm_ctx.c2 * 2) * DSP_FREQ_GHZ)/((float)(end_time - start_time));
-			printf("GOPS = %f\n", gops);
+			L1_CACHE_INV(gemm_ctx.p_output, gemm_ctx.r1 * gemm_ctx.c2 * sizeof(FLT_MAP), CACHE_WAIT);
+			cycles = end_time - start_time;
+			runtime = (float)cycles / DSP_FREQ_MHZ;
+			//gops = ((gemm_ctx.r1 * gemm_ctx.c1 * gemm_ctx.c2 * 2) * DSP_FREQ_GHZ)/((float)(end_time - start_time));
+			gops = gemm_ctx.r1/(float)cycles;
+			gops *= gemm_ctx.c1;
+			gops *= (gemm_ctx.c2 * 2 * DSP_FREQ_GHZ);
 
+			printf("%d, %d, %d, %lld, %.4f, %.4f\n", gemm_ctx.r1, gemm_ctx.c1, gemm_ctx.c2, cycles, runtime, gops);
+#if COMPARE_RESULT
 			// Compare the result. Since one matrix is identity matrix, the output must be = second matrix(only for square matrix case)
-			if(GEMM_ARITHMETIC_MODE) {
+#if FIXED_POINT_GEMM
 				for(i = 0; i < gemm_ctx.r1 * gemm_ctx.c2; i++) {
 					if(gemm_ctx.p_output[i] != gemm_ctx.p_input_2[i]) {
 						printf("Data mismatch at Row = %d, col = %d : Org : %d\tAct : %d\n",
@@ -279,7 +295,7 @@ void run_gemm_bmark() {
 						return;
 					}
 				}
-			} else {
+#else
 				p_out = (FLT_MAP *)gemm_ctx.p_output;
 				p_ref = (FLT_MAP *)gemm_ctx.p_input_2;
 				for(i = 0; i < gemm_ctx.r1 * gemm_ctx.c2; i++) {
@@ -289,13 +305,14 @@ void run_gemm_bmark() {
 						return;
 					}
 				}
-			}
+#endif
+#endif
 			// reset the memory manager
 			reset_mem_manager();
 			reset_layer_sync_cntr();
 			toggle_image_init_flag(gemm);
 		}
-		common_mat_size *= 2;
+		common_mat_size += (GEMM_CONV_OUT_COL_FACTOR*2);
 		gemm++;
 	}
 }
