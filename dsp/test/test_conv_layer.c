@@ -5,10 +5,14 @@
 #include <ti/csl/csl_semAux.h>
 #include <ti/csl/csl_cacheAux.h>
 #include <ti/csl/csl_tsc.h>
+#include <ti/csl/csl_tsc.h>
 #include <stdio.h>
 #include <math.h>
 #include "app_profile.h"
+#include "data_sync.h"
+#include <math.h>
 
+#pragma DATA_ALIGN(conv_ctx, 64);
 #pragma DATA_SECTION(conv_ctx, ".shared_ocm")
 CONV_LYR_CTX_T far conv_ctx;
 
@@ -251,4 +255,130 @@ TEST_STATUS_E test_conv_layer() {
 	}
 
 	return status.flag;
+}
+
+void conv_setup(int no_inputs, int in_h, int in_w, int no_outputs, int K, int stride, int pad) {
+	int out_height, out_width;
+	int quo, rem, core, map;
+	int no_map_frac_bits = 10;
+	int no_ker_frac_bits = 11;
+
+	out_height = (in_h + 2*pad - K + 1 + stride - 1)/ stride;
+	out_width = (in_w + 2*pad - K + 1 + stride - 1)/ stride;
+	conv_ctx.conv_info = (CONV_INFO_T){in_h, in_w, K, no_inputs, no_outputs, pad, stride, no_ker_frac_bits, no_map_frac_bits};
+
+	conv_ctx.lyr_arith_mode = FIXED_POINT;
+
+	// input and output buffer allocation
+	conv_ctx.p_fix_output = shared_malloc(out_height * out_width * no_outputs * sizeof(FIX_MAP));
+	conv_ctx.p_fix_ker = ext_malloc(K * K * no_inputs * no_outputs * sizeof(FIX_KER));
+
+	conv_ctx.p_fix_bias = private_malloc(no_outputs * sizeof(FIX_KER));
+
+	p_fix_input = shared_malloc((in_h + 2 * pad) * (in_w + 2 * pad) * no_inputs * sizeof(FIX_MAP));
+
+	quo = conv_ctx.conv_info.no_outputs / NO_CORES;
+	rem = conv_ctx.conv_info.no_outputs % NO_CORES;
+	map = 0;
+	for(core = 0; core < NO_CORES; core++) {
+		conv_ctx.start_map[core] = map;
+		if(rem == 0) {
+			conv_ctx.no_maps[core] = quo;
+			map += quo;
+		} else if(core < rem) {
+			conv_ctx.no_maps[core] = quo + 1;
+			map += (quo + 1);
+		} else {
+			conv_ctx.no_maps[core] = quo;
+			map += quo;
+		}
+	}
+	L1_CACHE_WB((void *)&conv_ctx, sizeof(CONV_LYR_CTX_T), CACHE_WAIT);
+}
+
+int get_end_size(int no_inputs, int no_outputs, int pad) {
+	int in_buff_size, out_buff_size, end_size;
+	float isize, osize;
+	int out_h, out_w, max_buff_size, in_size, out_size;
+	max_buff_size = 2 * 1024 * 1024;	// we need 2 buffers
+
+	isize = sqrt((float)max_buff_size / (no_inputs * sizeof(FIX_MAP)));
+	in_size = (int)isize - 2 * pad;
+
+	osize = sqrt((float)max_buff_size / (no_outputs * sizeof(FIX_MAP)));
+	out_size = (int)osize;
+
+	end_size = in_size < out_size ? in_size : out_size;
+	end_size = end_size > 256 ? 256 : end_size;
+	return end_size;
+}
+void conv_layer_sweep() {
+	int K, in_w, in_h, out_w, no_imaps, no_omaps, out_h, stride, pad, k;
+	int in_size, start_size, end_size, run;
+	uint64_t start_time, end_time, cycles;
+	double gops, time_us;
+
+	int ker_list[5] = {3, 5, 7, 9, 11};
+	run = 0;
+	stride = 1;
+	if(core_id == MASTER_CORE_ID) {
+		printf("K, NO_OUTPUTS, NO_INPUTS, IN_SIZE, PAD, STRIDE, RUNTIME(us), GOPS\n");
+	}
+	for(k = 0; k < 5; k++) {
+		K = ker_list[k];
+		pad = K/2;
+		//pad = 0;
+		for(no_omaps = 4; no_omaps <= 64; no_omaps += 8) {
+			for(no_imaps = 4; no_imaps <= 64; no_imaps += 8) {
+				if(pad == 0) {
+					start_size = K;
+				} else {
+					start_size = 4;
+				}
+				end_size = get_end_size(no_imaps, no_omaps, pad);
+				for(in_size = start_size; in_size <= end_size; in_size += 16) {
+					in_h = in_size; in_w = in_size;
+					out_h = (in_h + 2 * pad - K + 1 + stride - 1)/ stride;
+					out_w = (in_w + 2 * pad - K + 1 + stride - 1)/ stride;
+
+					if(core_id != MASTER_CORE_ID) {
+						wait_for_image_init(run);
+						L1_CACHE_INV((void *)&conv_ctx, sizeof(CONV_LYR_CTX_T), CACHE_WAIT);
+						L1_CACHE_INV(p_fix_input, in_h * in_w * no_imaps * sizeof(FIX_MAP), CACHE_WAIT);
+					} else {
+						conv_setup(no_imaps, in_h, in_w, no_omaps, K, stride, pad);
+
+						toggle_image_init_flag(run);
+						start_time = CSL_tscRead();
+					}
+
+					dsp_conv_layer(&conv_ctx, p_flt_input, p_fix_input);
+
+					// signal the completion of portion of  the output
+					signal_lyr_completion(run);
+
+					// wait for all cores / portions of output
+					wait_for_maps(run);
+
+					if(core_id == MASTER_CORE_ID) {
+						end_time = CSL_tscRead();
+
+						L1_CACHE_INV(conv_ctx.p_fix_output,  out_h * out_w * no_omaps * sizeof(FIX_MAP), CACHE_WAIT);
+
+						cycles = end_time - start_time;
+						gops = out_h * out_w * no_omaps/(float)cycles;
+						gops *= (no_imaps * K * K * 2 * DSP_FREQ_IN_GHZ);
+						time_us = (double)cycles / DSP_FREQ_IN_MHZ;
+
+						printf("%d, %d, %d, %d, %d, %d, %.4f, %.4f\n",
+							K, no_omaps, no_imaps, in_size, pad, stride, time_us, gops);
+						toggle_image_init_flag(run);
+						reset_layer_sync_cntr();
+						reset_mem_manager();
+					}
+					run++;
+				}
+			}
+		}
+	}
 }

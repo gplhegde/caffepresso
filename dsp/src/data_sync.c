@@ -127,7 +127,7 @@ void signal_lyr_completion(uint32_t nn_lyr) {
 	while ((CSL_semAcquireDirect (SHARED_MEM_SEM)) == 0);
 
 	// FIXME: Need to invalidate L1D before reading and incrementing?
-	p_sync_obj->sem_lyr_sync[nn_lyr] = get_sync_member(SEM_LYR_SYNC, nn_lyr) + 1;
+	p_sync_obj->sem_lyr_sync[nn_lyr % NO_DEEP_LAYERS] = get_sync_member(SEM_LYR_SYNC, nn_lyr % NO_DEEP_LAYERS) + 1;
 
 
 	// write back the updated counter
@@ -146,7 +146,7 @@ void wait_for_maps(uint32_t nn_lyr) {
 
 	//member = (nn_lyr % 2) == 0 ? SEM_LYR_SYNC_0 : SEM_LYR_SYNC_1;
 	do {
-		sem_cnt = (uint32_t) get_sync_member(SEM_LYR_SYNC, nn_lyr);
+		sem_cnt = (uint32_t) get_sync_member(SEM_LYR_SYNC, nn_lyr % NO_DEEP_LAYERS);
 	} while(sem_cnt != NO_CORES);
 
 	// invalidate all cached data from the map buffers in MSMC RAM except the shared data structures in the first 1KB region.

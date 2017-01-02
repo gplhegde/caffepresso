@@ -89,7 +89,8 @@ void main(void) {
 	run_dsp_bmarks();
 #else
 	// test all supported layers
-	test_layers();
+	//test_layers();
+	conv_layer_sweep();
 #endif
 	printf("%d : Application complete\n", core_id);
 }
