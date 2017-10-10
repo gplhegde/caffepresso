@@ -1,9 +1,15 @@
-/*
- * This is the program that runs on each Epiphany eCore.
- *
- * Written by: Siddhartha (NTU)
- * Email: siddhart005@e.ntu.edu.sg
- */
+/******************************************************************************************
+*
+*	Author: Siddhartha (sidmontu at gmail dot com)
+*
+*	About: The C program that runs on all eCores.
+*
+*	---------------------------------------- STATUS ---------------------------------------
+*	EPIPHANY SOLVER UNDER DEVELOPMENT (NOT COMPLETE)
+*	Note: The Epiphany solver is currently being re-optimized for solving deep CNN layers
+*	for faster performance, and tighter control with the Caffepresso backend.
+*
+******************************************************************************************/
 
 #include <stdint.h>
 #include "e_lib.h"
@@ -38,13 +44,8 @@ void pad_patch(PATCH_T *src, PATCH_T *dest, unsigned width, unsigned height, uns
 
 int main(void){
 
-	mailboxes = (FLAG_T *)DONE_ADDR; //4 mailbox locations available per core
-	*mailboxes = 0xbeefdead;
-	mailboxes[1] = 0xdeadbeef;
-
-	unsigned coreid = e_group_config.core_row*4+e_group_config.core_col;
-
-	/*allocate memory based on number of nodes and edges*/
+	mailboxes = (FLAG_T *)DONE_ADDR; // 4 mailbox locations available per core
+	/* instantiate pointers to parameter memory */
 	num_maps = (GLOBAL_CONSTANTS_T *)PARAMETERS_ADDR;
 	num_patches = (GLOBAL_CONSTANTS_T *)(num_maps + 1);
 	kernel_width = (GLOBAL_CONSTANTS_T *)(num_patches + 1);
@@ -62,65 +63,70 @@ int main(void){
 	pooling_stride = (GLOBAL_CONSTANTS_T *)(prev_map_flattened_size + 1);
 	conv_stride = (GLOBAL_CONSTANTS_T *)(pooling_stride + 1);
 	conv_pad = (GLOBAL_CONSTANTS_T *)(conv_stride + 1);
-	window_scale = (SCALE_T *)(conv_pad + 1); //this is not counted as NUM_PARAMS, since it's float..
-
-	int i,j,k,p;
+	window_scale = (SCALE_T *)(conv_pad + 1); // this is not counted as NUM_PARAMS, since it's float..
 	
-	unsigned accum_map_width = (*patch_width - *kernel_width + 1 + 2*(*conv_pad))/((*subsample_factor)*(*conv_stride));
-	unsigned accum_map_height = (*patch_height - *kernel_width + 1 + 2*(*conv_pad))/((*subsample_factor)*(*conv_stride));
-	unsigned map_size = accum_map_width*accum_map_height;
-	unsigned amw = accum_map_width / (*pooling_stride + *subsample_factor);
-	unsigned amh = accum_map_height / (*pooling_stride + *subsample_factor);
+	int i,j,k,p;
+	unsigned coreid = e_group_config.core_row*4+e_group_config.core_col;
 
-	kernel = (KERNEL_T *)(window_scale + 1);
-	kernel_scale = (SCALE_T *)(kernel + (*num_maps)*(*kernel_width)*(*kernel_width));
-	patch = (PATCH_T *)(kernel_scale + (*num_maps));
-	MAP_T *local_map_accum = (MAP_T *)(patch + (*patch_width)*(*patch_height));
-	INTERMEDIATE_T *filter2D_out = (INTERMEDIATE_T *)(local_map_accum + map_size);
-	unsigned conv_size_width = accum_map_width*(*subsample_factor);
-	unsigned conv_size_height = accum_map_height*(*subsample_factor);
-	PATCH_T *patch_padded;
-	MAP_T *map_patch;
-	if (*conv_pad > 0){
-		patch_padded = (PATCH_T *)(filter2D_out + conv_size_width*conv_size_height);
-		map_patch = (MAP_T *)(patch_padded + (*patch_width+2*(*conv_pad))*(*patch_height+(*conv_pad)));
-	} else {
-		patch_padded = patch;
-		map_patch = (MAP_T *)(filter2D_out + conv_size_width*conv_size_height);
-	}
+	while (mailboxes[0] != 3) { // 3 = global complete (i.e. all layers have finished)
+		if (mailboxes[0] == 2) { // only start execution once host has written 2 to mailbox
+						
+			unsigned accum_map_width = (*patch_width - *kernel_width + 1 + 2*(*conv_pad))/((*subsample_factor)*(*conv_stride));
+			unsigned accum_map_height = (*patch_height - *kernel_width + 1 + 2*(*conv_pad))/((*subsample_factor)*(*conv_stride));
+			unsigned map_size = accum_map_width*accum_map_height;
+			unsigned amw = accum_map_width / (*pooling_stride + *subsample_factor);
+			unsigned amh = accum_map_height / (*pooling_stride + *subsample_factor);
 
-	load_kernels(*dram_kernel_ptr,*num_maps,*kernel_width,coreid);
-
-	for (i=0;i<*num_maps;i++){
-		KERNEL_T *ker = (KERNEL_T *)(kernel + (i*(*kernel_width)*(*kernel_width)));
-		SCALE_T scale = kernel_scale[i];
-		for (p=0;p<*num_patches;p++){
-			for (k=0;k<map_size;k++)
-				local_map_accum[k] = 0.0f; // initialize accum to zero..
-			for (j=0;j<*num_maps_prev;j++){
-				load_patch(p,j,*patch_width,*patch_height,*patch_ptr,*prev_map_flattened_size);
-				if (*conv_pad > 0){
-					pad_patch(patch,patch_padded,*patch_width,*patch_height,*conv_pad);
-				}
-				filter2D(ker,patch_padded,filter2D_out,*kernel_width,*patch_width,*patch_height,scale,*conv_stride);
-				for (k=0;k<map_size;k++)
-					local_map_accum[k] += filter2D_out[k]; // accum patch..
-			}
-			if (*pool_window_size != 0){
-				pool(local_map_accum,*pool_window_size,*patch_width,*patch_height,*window_scale,*pooling_stride);
-			}
-			if (*subsample_factor > 1){
-				subsample(local_map_accum,map_patch,*subsample_factor,*patch_width/(*pooling_stride),*patch_height/(*pooling_stride));
+			kernel = (KERNEL_T *)(window_scale + 1);
+			kernel_scale = (SCALE_T *)(kernel + (*num_maps)*(*kernel_width)*(*kernel_width));
+			patch = (PATCH_T *)(kernel_scale + (*num_maps));
+			MAP_T *local_map_accum = (MAP_T *)(patch + (*patch_width)*(*patch_height));
+			INTERMEDIATE_T *filter2D_out = (INTERMEDIATE_T *)(local_map_accum + map_size);
+			unsigned conv_size_width = accum_map_width*(*subsample_factor);
+			unsigned conv_size_height = accum_map_height*(*subsample_factor);
+			PATCH_T *patch_padded;
+			MAP_T *map_patch;
+			if (*conv_pad > 0){
+				patch_padded = (PATCH_T *)(filter2D_out + conv_size_width*conv_size_height);
+				map_patch = (MAP_T *)(patch_padded + (*patch_width+2*(*conv_pad))*(*patch_height+(*conv_pad)));
 			} else {
-				map_patch = local_map_accum;
+				patch_padded = patch;
+				map_patch = (MAP_T *)(filter2D_out + conv_size_width*conv_size_height);
 			}
-			
-			// transfer the map out to DRAM based on coreid.
-			dump_to_dram(*dram_map_ptr,map_patch,p,i,amw,amh,*big_map_width,*big_map_height,coreid,*num_maps);
+
+			load_kernels(*dram_kernel_ptr,*num_maps,*kernel_width,coreid);
+
+			for (i=0;i<*num_maps;i++){
+				KERNEL_T *ker = (KERNEL_T *)(kernel + (i*(*kernel_width)*(*kernel_width)));
+				SCALE_T scale = kernel_scale[i];
+				for (p=0;p<*num_patches;p++){
+					for (k=0;k<map_size;k++)
+						local_map_accum[k] = 0.0f; // initialize accum to zero..
+					for (j=0;j<*num_maps_prev;j++){
+						load_patch(p,j,*patch_width,*patch_height,*patch_ptr,*prev_map_flattened_size);
+						if (*conv_pad > 0){
+							pad_patch(patch,patch_padded,*patch_width,*patch_height,*conv_pad);
+						}
+						filter2D(ker,patch_padded,filter2D_out,*kernel_width,*patch_width,*patch_height,scale,*conv_stride);
+						for (k=0;k<map_size;k++)
+							local_map_accum[k] += filter2D_out[k]; // accum patch..
+					}
+					if (*pool_window_size != 0){
+						pool(local_map_accum,*pool_window_size,*patch_width,*patch_height,*window_scale,*pooling_stride);
+					}
+					if (*subsample_factor > 1){
+						subsample(local_map_accum,map_patch,*subsample_factor,*patch_width/(*pooling_stride),*patch_height/(*pooling_stride));
+					} else {
+						map_patch = local_map_accum;
+					}
+					
+					// transfer the map out to DRAM based on coreid.
+					dump_to_dram(*dram_map_ptr,map_patch,p,i,amw,amh,*big_map_width,*big_map_height,coreid,*num_maps);
+				}
+			}
+			mailboxes[0] = 1; // tell host that eCore has finished processing
 		}
 	}
-
-	*mailboxes = 0xdeadbeef;
 
 	return 0;
 }

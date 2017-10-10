@@ -99,6 +99,7 @@ int main(int argc, char **argv){
 	for (i=0;i<NUM_HIDDEN_NEURONS;i++)
 		pHiddenBias[i] = rand()%2;
 
+	MAP_T *L2_maps_flattened_seq = (MAP_T *)malloc(L2_MAPS*L2_MAP_SIZE*sizeof(MAP_T));
 	/****************************************** CPU-ONLY solver ******************************************/
 	int t;
 	//start taking note of time, and start event counters
@@ -136,6 +137,14 @@ int main(int argc, char **argv){
 				avepool_subsample(aligned,L2_maps[i],DOWN_FAC2,6);
 			}
 		}
+		
+		//allocate to flattened array
+		for (i=0;i<L2_MAPS;i++){
+			for (j=0;j<L2_MAP_SIZE;j++){
+				L2_maps_flattened_seq[i*L2_MAP_SIZE+j] = L2_maps[i][j];
+			}
+		}
+		elm_classifier(L2_maps_flattened_seq,L2_MAPS*L2_MAP_SIZE,NUM_HIDDEN_NEURONS,NUM_OUTPUT_NEURONS,pInputWt,pHiddenBias,pOutputWt);
 	}
 	
 	//stop taking note of time, and stop event counters
@@ -252,8 +261,8 @@ int main(int argc, char **argv){
 			for (j=0;j<platform.cols;j++){			
 				e_read(&dev,i,j,L2_MAPS_ADDR,read,L2_MAX_MAPS_PER_ECORE*L2_MAP_SIZE*sizeof(MAP_T));
 				int k;
-				for (k=0;k<l2map_c[i*4+j];k++){
-					unsigned id = L2_shard_map[i*4+j][k];
+				for (k=0;k<l2map_c[i*platform.cols+j];k++){
+					unsigned id = L2_shard_map[i*platform.cols+j][k];
 					int n;
 					for (n=0;n<L2_MAP_SIZE;n++)
 						L2_maps_parr[id][n] = read[k*L2_MAP_SIZE+n];
@@ -264,7 +273,7 @@ int main(int argc, char **argv){
 		//allocate to flattened array
 		for (i=0;i<L2_MAPS;i++){
 			for (j=0;j<L2_MAP_SIZE;j++){
-				L2_maps_flattened[i*L2_MAPS+j] = L2_maps_parr[i][j];
+				L2_maps_flattened[i*L2_MAP_SIZE+j] = L2_maps_parr[i][j];
 			}
 		}
 		
@@ -549,14 +558,13 @@ void elm_classifier(float *pInputNeurons, int nInputNeurons, int nHiddenNeurons,
 	float *pHiddenBias, float *pOutputWt) {
 	
 	float *pHiddenNeuron, *pOutputNeuron;
-	int v, n, label, nWeightVec, nFullyUsedVec, remHiddenNeurons;
+	int v, n, label, nFullyUsedVec, remHiddenNeurons;
 
 	pHiddenNeuron = (float *)malloc(nHiddenNeurons * sizeof(float));
 	pOutputNeuron = (float *)malloc(nOutputNeurons * sizeof(float));
 
-	nWeightVec = ceil(nHiddenNeurons / nInputNeurons);
 	nFullyUsedVec = floor(nHiddenNeurons / nInputNeurons);
-	
+
 	// Input layer computations
 	for (v = 0; v < nFullyUsedVec; v++) {
 		for (n = 0; n < nInputNeurons; n++) {
@@ -572,7 +580,7 @@ void elm_classifier(float *pInputNeurons, int nInputNeurons, int nHiddenNeurons,
 		pHiddenNeuron[nFullyUsedVec * nInputNeurons + n] = dot_prod_rotate_weightVec(pInputNeurons,
 			pInputWt + nFullyUsedVec * nInputNeurons, nInputNeurons, n);
 	}
-	
+
 	// Add bias to hidden neurons and do nonlinear activation
 	for (n = 0;n < nHiddenNeurons;n++){
 		pHiddenNeuron[n] += pHiddenBias[n];
@@ -586,10 +594,10 @@ void elm_classifier(float *pInputNeurons, int nInputNeurons, int nHiddenNeurons,
 	
 	//Classify
 	label = index_of_max(pOutputNeuron, nOutputNeurons);
-	//printf("THE PREDICTED LABEL FOR THE GIVEN INPUT IS = %d\n", label);
+	// printf("THE PREDICTED LABEL FOR THE GIVEN INPUT IS = %d\n", label);
 
-	//free(pHiddenNeuron);
-	//free(pOutputNeuron);
+	free(pHiddenNeuron);
+	free(pOutputNeuron);
 }
 
 static inline float dot_prod(float *pActivation , float *pWeight, int vLen) {
@@ -633,7 +641,7 @@ static int index_of_max(float *pVec, int vLen) {
 	}
 	if ( maxIndex >= 0) {
 	} else {
-		//printf("No value greater than %f is not found in the array\n", max);
+		// printf("No value greater than %f is not found in the array\n", max);
 	}
 
 	return maxIndex;

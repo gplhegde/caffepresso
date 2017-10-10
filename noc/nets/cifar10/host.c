@@ -136,6 +136,7 @@ int main(int argc, char **argv){
 	for (i=0;i<NUM_HIDDEN_NEURONS;i++)
 		pHiddenBias[i] = rand()%2;
 
+	float *L3_maps_flattened_seq = (float *)malloc(L3_MAPS*L3_MAP_SIZE*sizeof(float));
 	/****************************************** CPU-ONLY solver ******************************************/
 	int t;
 	//start taking note of time, and start event counters
@@ -179,6 +180,15 @@ int main(int argc, char **argv){
 			filter2D(L3_kernel[i],accum_L2,filter2D_out_L3,L3_KERNEL_WIDTH,L2_MAP_WIDTH,L3_kernel_scale[i]);
 			pool_subsample(filter2D_out_L3,L3_maps[i],WINDOW_SIZE3,DOWN_FAC3,conv_size,0); //ave-pool
 		}
+		
+		//allocate to flattened array
+		for (i=0;i<L3_MAPS;i++){
+			for (j=0;j<L3_MAP_SIZE;j++){
+				L3_maps_flattened_seq[i*L3_MAP_SIZE+j] = (float)L3_maps[i][j];
+			}
+		}
+		
+		elm_classifier(L3_maps_flattened_seq,L3_MAPS*L3_MAP_SIZE,NUM_HIDDEN_NEURONS,NUM_OUTPUT_NEURONS,pInputWt,pHiddenBias,pOutputWt);
 	}
 	
 	//stop taking note of time, and stop event counters
@@ -330,11 +340,11 @@ int main(int argc, char **argv){
 		//allocate to flattened array
 		for (i=0;i<L3_MAPS;i++){
 			for (j=0;j<L3_MAP_SIZE;j++){
-				L3_maps_flattened[i*L3_MAPS+j] = (float)L3_maps_parr[i][j];
+				L3_maps_flattened[i*L3_MAP_SIZE+j] = (float)L3_maps_parr[i][j];
 			}
 		}
 		
-		//elm_classifier(L3_maps_flattened,L3_MAPS*L3_MAP_SIZE,NUM_HIDDEN_NEURONS,NUM_OUTPUT_NEURONS,pInputWt,pHiddenBias,pOutputWt);
+		elm_classifier(L3_maps_flattened,L3_MAPS*L3_MAP_SIZE,NUM_HIDDEN_NEURONS,NUM_OUTPUT_NEURONS,pInputWt,pHiddenBias,pOutputWt);
 	}
 
 	//stop taking note of time, and stop event counters
