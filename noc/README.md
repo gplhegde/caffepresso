@@ -1,4 +1,4 @@
-#Current Status -- PLEASE READ
+#Current Status - PLEASE READ
 The Epiphany open-source release is under heavy development for full-functionality support. If you have your network protobuf description, and an LMDB database file that contains your network weight parameters, you can evaluate your network on a new image using only the ARM CPU on the Parallella board. Support for the ARM+Epiphany implementation is being reworked at the moment for faster evaluation and tighter Caffe integration. If you would like to contribute, please contact the author (sidmontu AT gmail DOT com).
 
 #Description
